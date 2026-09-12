@@ -1,0 +1,330 @@
+{
+  "entities": [
+    {
+      "name": "orders",
+      "fields": [
+        {
+          "name": "order_id",
+          "source_column": "order_id",
+          "source_file": "orders",
+          "confidence": 0.99
+        },
+        {
+          "name": "customer_id",
+          "source_column": "customer_id",
+          "source_file": "orders",
+          "confidence": 0.99
+        },
+        {
+          "name": "unknown",
+          "source_column": "order_status",
+          "source_file": "orders",
+          "confidence": 0.15
+        },
+        {
+          "name": "transaction_date",
+          "source_column": "order_purchase_timestamp",
+          "source_file": "orders",
+          "confidence": 0.98
+        },
+        {
+          "name": "transaction_date",
+          "source_column": "order_approved_at",
+          "source_file": "orders",
+          "confidence": 0.85
+        },
+        {
+          "name": "unknown",
+          "source_column": "order_delivered_carrier_date",
+          "source_file": "orders",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "order_delivered_customer_date",
+          "source_file": "orders",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "order_estimated_delivery_date",
+          "source_file": "orders",
+          "confidence": 0.2
+        }
+      ]
+    },
+    {
+      "name": "customers",
+      "fields": [
+        {
+          "name": "customer_id",
+          "source_column": "customer_id",
+          "source_file": "customers",
+          "confidence": 0.99
+        },
+        {
+          "name": "customer_id",
+          "source_column": "customer_unique_id",
+          "source_file": "customers",
+          "confidence": 0.95
+        },
+        {
+          "name": "region",
+          "source_column": "customer_zip_code_prefix",
+          "source_file": "customers",
+          "confidence": 0.85
+        },
+        {
+          "name": "region",
+          "source_column": "customer_city",
+          "source_file": "customers",
+          "confidence": 0.9
+        },
+        {
+          "name": "region",
+          "source_column": "customer_state",
+          "source_file": "customers",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "name": "order_items",
+      "fields": [
+        {
+          "name": "order_id",
+          "source_column": "order_id",
+          "source_file": "order_items",
+          "confidence": 0.99
+        },
+        {
+          "name": "unknown",
+          "source_column": "order_item_id",
+          "source_file": "order_items",
+          "confidence": 0.2
+        },
+        {
+          "name": "product_id",
+          "source_column": "product_id",
+          "source_file": "order_items",
+          "confidence": 0.99
+        },
+        {
+          "name": "unknown",
+          "source_column": "seller_id",
+          "source_file": "order_items",
+          "confidence": 0.2
+        },
+        {
+          "name": "transaction_date",
+          "source_column": "shipping_limit_date",
+          "source_file": "order_items",
+          "confidence": 0.6
+        },
+        {
+          "name": "price",
+          "source_column": "price",
+          "source_file": "order_items",
+          "confidence": 0.99
+        },
+        {
+          "name": "revenue",
+          "source_column": "freight_value",
+          "source_file": "order_items",
+          "confidence": 0.55
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "fields": [
+        {
+          "name": "product_id",
+          "source_column": "product_id",
+          "source_file": "products",
+          "confidence": 0.99
+        },
+        {
+          "name": "category",
+          "source_column": "product_category_name",
+          "source_file": "products",
+          "confidence": 0.98
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_name_lenght",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_description_lenght",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_photos_qty",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_weight_g",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_length_cm",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_height_cm",
+          "source_file": "products",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "product_width_cm",
+          "source_file": "products",
+          "confidence": 0.2
+        }
+      ]
+    },
+    {
+      "name": "sellers",
+      "fields": [
+        {
+          "name": "unknown",
+          "source_column": "seller_id",
+          "source_file": "sellers",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "seller_zip_code_prefix",
+          "source_file": "sellers",
+          "confidence": 0.2
+        },
+        {
+          "name": "region",
+          "source_column": "seller_city",
+          "source_file": "sellers",
+          "confidence": 0.6
+        },
+        {
+          "name": "region",
+          "source_column": "seller_state",
+          "source_file": "sellers",
+          "confidence": 0.7
+        }
+      ]
+    },
+    {
+      "name": "payments",
+      "fields": [
+        {
+          "name": "order_id",
+          "source_column": "order_id",
+          "source_file": "payments",
+          "confidence": 0.99
+        },
+        {
+          "name": "unknown",
+          "source_column": "payment_sequential",
+          "source_file": "payments",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "payment_type",
+          "source_file": "payments",
+          "confidence": 0.2
+        },
+        {
+          "name": "unknown",
+          "source_column": "payment_installments",
+          "source_file": "payments",
+          "confidence": 0.2
+        },
+        {
+          "name": "revenue",
+          "source_column": "payment_value",
+          "source_file": "payments",
+          "confidence": 0.95
+        }
+      ]
+    },
+    {
+      "name": "category_translation",
+      "fields": [
+        {
+          "name": "category",
+          "source_column": "product_category_name",
+          "source_file": "category_translation",
+          "confidence": 0.96
+        },
+        {
+          "name": "category",
+          "source_column": "product_category_name_english",
+          "source_file": "category_translation",
+          "confidence": 0.96
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from_field": "orders.customer_id",
+      "to_field": "customers.customer_id",
+      "confidence": 1.0,
+      "direction": "orders.customer_id -> customers.customer_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.order_id",
+      "to_field": "orders.order_id",
+      "confidence": 0.995,
+      "direction": "order_items.order_id -> orders.order_id",
+      "validated": true
+    },
+    {
+      "from_field": "orders.order_id",
+      "to_field": "payments.order_id",
+      "confidence": 0.995,
+      "direction": "orders.order_id -> payments.order_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.product_id",
+      "to_field": "products.product_id",
+      "confidence": 1.0,
+      "direction": "order_items.product_id -> products.product_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.seller_id",
+      "to_field": "sellers.seller_id",
+      "confidence": 0.995,
+      "direction": "order_items.seller_id -> sellers.seller_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.order_id",
+      "to_field": "payments.order_id",
+      "confidence": 0.99,
+      "direction": "order_items.order_id -> payments.order_id",
+      "validated": true
+    },
+    {
+      "from_field": "products.product_category_name",
+      "to_field": "category_translation.product_category_name",
+      "confidence": 0.98,
+      "direction": "products.product_category_name -> category_translation.product_category_name",
+      "validated": true
+    }
+  ]
+}

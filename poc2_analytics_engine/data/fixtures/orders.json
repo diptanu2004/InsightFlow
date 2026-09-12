@@ -1,0 +1,6 @@
+{
+  "name": "orders",
+  "query": {"operation": "aggregate", "metric": "orders"},
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 7.0
+}

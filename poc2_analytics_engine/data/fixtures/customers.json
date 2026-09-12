@@ -1,0 +1,6 @@
+{
+  "name": "customers",
+  "query": {"operation": "aggregate", "metric": "customers"},
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 4.0
+}

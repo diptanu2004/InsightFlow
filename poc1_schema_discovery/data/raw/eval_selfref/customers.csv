@@ -1,0 +1,6 @@
+customer_id,customer_name,referred_by_customer_id
+C1,Sofia Alvarez,
+C2,Derek Chan,C1
+C3,Amara Obi,C1
+C4,Liam O'Connor,C2
+C5,Yuki Tanaka,C2

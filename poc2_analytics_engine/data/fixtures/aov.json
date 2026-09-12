@@ -1,0 +1,7 @@
+{
+  "name": "aov",
+  "query": {"operation": "aggregate", "metric": "aov"},
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 112.85714285714286,
+  "tolerance": 1e-6
+}

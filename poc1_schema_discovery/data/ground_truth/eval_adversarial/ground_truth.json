@@ -1,0 +1,37 @@
+{
+  "expected_mappings": [
+    { "source_file": "transactions", "source_column": "txn_id", "semantic_type": "order_id", "confidence": 1.0 },
+    { "source_file": "transactions", "source_column": "buyer_id", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "transactions", "source_column": "item_id", "semantic_type": "product_id", "confidence": 1.0 },
+    { "source_file": "transactions", "source_column": "txn_date", "semantic_type": "transaction_date", "confidence": 1.0 },
+    { "source_file": "transactions", "source_column": "amount_paid", "semantic_type": "revenue", "confidence": 1.0 },
+    { "source_file": "transactions", "source_column": "status_code", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "buyers", "source_column": "id", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "buyers", "source_column": "full_name", "semantic_type": "customer_name", "confidence": 1.0 },
+    { "source_file": "buyers", "source_column": "home_region", "semantic_type": "region", "confidence": 1.0 },
+    { "source_file": "buyers", "source_column": "joined_at", "semantic_type": "signup_date", "confidence": 1.0 },
+
+    { "source_file": "items", "source_column": "id", "semantic_type": "product_id", "confidence": 1.0 },
+    { "source_file": "items", "source_column": "item_title", "semantic_type": "product_name", "confidence": 1.0 },
+    { "source_file": "items", "source_column": "dept", "semantic_type": "category", "confidence": 1.0 },
+    { "source_file": "items", "source_column": "unit_cost", "semantic_type": "price", "confidence": 1.0 },
+    { "source_file": "items", "source_column": "status_code", "semantic_type": "unknown", "confidence": 1.0 }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "transactions.buyer_id",
+      "to_field": "buyers.id",
+      "confidence": 1.0,
+      "direction": "transactions.buyer_id -> buyers.id",
+      "validated": true
+    },
+    {
+      "from_field": "transactions.item_id",
+      "to_field": "items.id",
+      "confidence": 1.0,
+      "direction": "transactions.item_id -> items.id",
+      "validated": true
+    }
+  ]
+}

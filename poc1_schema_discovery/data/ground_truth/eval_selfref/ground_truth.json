@@ -1,0 +1,16 @@
+{
+  "expected_mappings": [
+    { "source_file": "customers", "source_column": "customer_id", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_name", "semantic_type": "customer_name", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "referred_by_customer_id", "semantic_type": "customer_id", "confidence": 1.0 }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "customers.referred_by_customer_id",
+      "to_field": "customers.customer_id",
+      "confidence": 1.0,
+      "direction": "customers.referred_by_customer_id -> customers.customer_id",
+      "validated": true
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+product_id,product_category_name,product_name_lenght,product_description_lenght,product_photos_qty,product_weight_g,product_length_cm,product_height_cm,product_width_cm
+368c6c730842d78016ad823897a372db,ferramentas_jardim,57.0,366.0,2.0,1650.0,30.0,22.0,30.0
+e67307ff0f15ade43fcb6e670be7a74c,beleza_saude,47.0,1474.0,3.0,150.0,43.0,13.0,14.0
+e95ee6822b66ac6058e2e4aff656071a,esporte_lazer,52.0,1153.0,1.0,180.0,17.0,11.0,14.0
+a1804276d9941ac0733cfd409f5206eb,,,,,600.0,35.0,35.0,15.0
+2d9ff06c8870a518f5f6909774e140fb,utilidades_domesticas,44.0,543.0,3.0,950.0,25.0,10.0,36.0
+c50ca07e9e4db9ea5011f06802c0aea0,beleza_saude,59.0,1782.0,1.0,125.0,25.0,14.0,18.0
+0b0172eb0fd18479d29c3bc122c058c2,eletronicos,53.0,265.0,2.0,150.0,22.0,13.0,15.0
+1522589c64efd46731d3522568e5bc83,artigos_de_natal,35.0,415.0,4.0,550.0,37.0,10.0,37.0

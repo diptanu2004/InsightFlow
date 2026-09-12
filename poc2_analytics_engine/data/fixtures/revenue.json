@@ -1,0 +1,6 @@
+{
+  "name": "revenue",
+  "query": {"operation": "aggregate", "metric": "revenue"},
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 790.0
+}

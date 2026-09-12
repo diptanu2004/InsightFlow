@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+.git/
+.env
+*.md
+tests/
+*.duckdb
+# `data/` (the 80KB sample dataset + fixtures/queries the README's example commands reference)
+# is deliberately NOT excluded here — it used to be, which meant Dockerfile's `COPY data ./data`
+# would have had nothing to copy even after that line was added (a parent-directory .dockerignore
+# exclusion can't be selectively un-excluded — found during the POC 2 closure sweep). `examples/`
+# (the multi-MB real Olist datasets) doesn't need an entry here: Dockerfile never COPYs it, so
+# it's excluded from the image regardless of this file.

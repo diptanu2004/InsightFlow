@@ -1,0 +1,33 @@
+{
+  "expected_mappings": [
+    { "source_file": "orders", "source_column": "order_id", "semantic_type": "order_id", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "client", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "purchase_dt", "semantic_type": "transaction_date", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "net_amt", "semantic_type": "revenue", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "product_code", "semantic_type": "product_id", "confidence": 1.0 },
+
+    { "source_file": "customers", "source_column": "client", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_region", "semantic_type": "region", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "signup_dt", "semantic_type": "signup_date", "confidence": 1.0 },
+
+    { "source_file": "products", "source_column": "product_code", "semantic_type": "product_id", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "title", "semantic_type": "product_name", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "category_nm", "semantic_type": "category", "confidence": 1.0 }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.client",
+      "to_field": "customers.client",
+      "confidence": 1.0,
+      "direction": "orders.client -> customers.client",
+      "validated": true
+    },
+    {
+      "from_field": "orders.product_code",
+      "to_field": "products.product_code",
+      "confidence": 1.0,
+      "direction": "orders.product_code -> products.product_code",
+      "validated": true
+    }
+  ]
+}

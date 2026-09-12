@@ -1,0 +1,14 @@
+{
+  "name": "category_performance",
+  "query": {
+    "operation": "group_by",
+    "metric": "revenue",
+    "dimension": "category",
+    "sort": {"field": "category", "direction": "asc"}
+  },
+  "dataset_dir": "data/raw/sample",
+  "expected_value": [
+    {"category": "Gadgets", "value": 660.0},
+    {"category": "Home", "value": 130.0}
+  ]
+}

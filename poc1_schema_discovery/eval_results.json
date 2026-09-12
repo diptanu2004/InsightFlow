@@ -1,0 +1,74 @@
+[
+  {
+    "dataset": "eval_adversarial",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 0.6667,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_easy",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 1.0,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_hard",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 1.0,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_junction",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 1.0,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_medium",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 1.0,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_messy",
+    "status": "ok",
+    "mapping_precision": 1.0,
+    "mapping_recall": 1.0,
+    "relationship_precision": 1.0,
+    "relationship_recall": 1.0,
+    "error": null
+  },
+  {
+    "dataset": "eval_real_olist",
+    "status": "ok",
+    "mapping_precision": 0.625,
+    "mapping_recall": 0.625,
+    "relationship_precision": 0.5714,
+    "relationship_recall": 0.6667,
+    "error": null
+  },
+  {
+    "dataset": "eval_selfref",
+    "status": "ok",
+    "mapping_precision": 0.6667,
+    "mapping_recall": 0.6667,
+    "relationship_precision": 0.0,
+    "relationship_recall": 0.0,
+    "error": null
+  }
+]

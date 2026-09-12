@@ -1,0 +1,94 @@
+{
+  "expected_mappings": [
+    { "source_file": "orders", "source_column": "order_id", "semantic_type": "order_id", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "customer_id", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_status", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_purchase_timestamp", "semantic_type": "transaction_date", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_approved_at", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_delivered_carrier_date", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_delivered_customer_date", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "orders", "source_column": "order_estimated_delivery_date", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "customers", "source_column": "customer_id", "semantic_type": "customer_id", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_unique_id", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_zip_code_prefix", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_city", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "customers", "source_column": "customer_state", "semantic_type": "region", "confidence": 1.0 },
+
+    { "source_file": "order_items", "source_column": "order_id", "semantic_type": "order_id", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "order_item_id", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "product_id", "semantic_type": "product_id", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "seller_id", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "shipping_limit_date", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "price", "semantic_type": "revenue", "confidence": 1.0 },
+    { "source_file": "order_items", "source_column": "freight_value", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "products", "source_column": "product_id", "semantic_type": "product_id", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_category_name", "semantic_type": "category", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_name_lenght", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_description_lenght", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_photos_qty", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_weight_g", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_length_cm", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_height_cm", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "products", "source_column": "product_width_cm", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "sellers", "source_column": "seller_id", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "sellers", "source_column": "seller_zip_code_prefix", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "sellers", "source_column": "seller_city", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "sellers", "source_column": "seller_state", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "payments", "source_column": "order_id", "semantic_type": "order_id", "confidence": 1.0 },
+    { "source_file": "payments", "source_column": "payment_sequential", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "payments", "source_column": "payment_type", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "payments", "source_column": "payment_installments", "semantic_type": "unknown", "confidence": 1.0 },
+    { "source_file": "payments", "source_column": "payment_value", "semantic_type": "unknown", "confidence": 1.0 },
+
+    { "source_file": "category_translation", "source_column": "product_category_name", "semantic_type": "category", "confidence": 1.0 },
+    { "source_file": "category_translation", "source_column": "product_category_name_english", "semantic_type": "unknown", "confidence": 1.0 }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.customer_id",
+      "to_field": "customers.customer_id",
+      "confidence": 1.0,
+      "direction": "orders.customer_id -> customers.customer_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.order_id",
+      "to_field": "orders.order_id",
+      "confidence": 1.0,
+      "direction": "order_items.order_id -> orders.order_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.product_id",
+      "to_field": "products.product_id",
+      "confidence": 1.0,
+      "direction": "order_items.product_id -> products.product_id",
+      "validated": true
+    },
+    {
+      "from_field": "order_items.seller_id",
+      "to_field": "sellers.seller_id",
+      "confidence": 1.0,
+      "direction": "order_items.seller_id -> sellers.seller_id",
+      "validated": true
+    },
+    {
+      "from_field": "payments.order_id",
+      "to_field": "orders.order_id",
+      "confidence": 1.0,
+      "direction": "payments.order_id -> orders.order_id",
+      "validated": true
+    },
+    {
+      "from_field": "products.product_category_name",
+      "to_field": "category_translation.product_category_name",
+      "confidence": 1.0,
+      "direction": "products.product_category_name -> category_translation.product_category_name",
+      "validated": true
+    }
+  ]
+}

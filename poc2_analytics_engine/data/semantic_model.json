@@ -1,0 +1,101 @@
+{
+  "entities": [
+    {
+      "name": "orders",
+      "fields": [
+        {
+          "name": "order_id",
+          "source_column": "order_id",
+          "source_file": "orders",
+          "confidence": 1.0
+        },
+        {
+          "name": "customer_id",
+          "source_column": "customer_id",
+          "source_file": "orders",
+          "confidence": 1.0
+        },
+        {
+          "name": "product_id",
+          "source_column": "product_id",
+          "source_file": "orders",
+          "confidence": 1.0
+        },
+        {
+          "name": "revenue",
+          "source_column": "revenue",
+          "source_file": "orders",
+          "confidence": 1.0
+        },
+        {
+          "name": "transaction_date",
+          "source_column": "order_date",
+          "source_file": "orders",
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "name": "customers",
+      "fields": [
+        {
+          "name": "customer_id",
+          "source_column": "customer_id",
+          "source_file": "customers",
+          "confidence": 1.0
+        },
+        {
+          "name": "customer_name",
+          "source_column": "name",
+          "source_file": "customers",
+          "confidence": 1.0
+        },
+        {
+          "name": "region",
+          "source_column": "region",
+          "source_file": "customers",
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "name": "products",
+      "fields": [
+        {
+          "name": "product_id",
+          "source_column": "product_id",
+          "source_file": "products",
+          "confidence": 1.0
+        },
+        {
+          "name": "product_name",
+          "source_column": "name",
+          "source_file": "products",
+          "confidence": 1.0
+        },
+        {
+          "name": "category",
+          "source_column": "category",
+          "source_file": "products",
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from_field": "orders.customer_id",
+      "to_field": "customers.customer_id",
+      "confidence": 0.95,
+      "direction": "many_to_one",
+      "validated": true
+    },
+    {
+      "from_field": "orders.product_id",
+      "to_field": "products.product_id",
+      "confidence": 0.95,
+      "direction": "many_to_one",
+      "validated": true
+    }
+  ]
+}

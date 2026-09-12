@@ -1,0 +1,98 @@
+{
+  "expected_mappings": [
+    {
+      "source_file": "orders",
+      "source_column": "purchase_no",
+      "semantic_type": "order_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "event_day",
+      "semantic_type": "transaction_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "amount_text",
+      "semantic_type": "revenue",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "buyer_code",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "item_code",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "buyer_code",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "display_name",
+      "semantic_type": "customer_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "sales_zone",
+      "semantic_type": "region",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "registered",
+      "semantic_type": "signup_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "item_code",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "product_label",
+      "semantic_type": "product_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "class_name",
+      "semantic_type": "category",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "retail_price",
+      "semantic_type": "price",
+      "confidence": 1.0
+    }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.buyer_code",
+      "to_field": "customers.buyer_code",
+      "confidence": 1.0,
+      "direction": "orders.buyer_code -> customers.buyer_code",
+      "validated": true
+    },
+    {
+      "from_field": "orders.item_code",
+      "to_field": "products.item_code",
+      "confidence": 1.0,
+      "direction": "orders.item_code -> products.item_code",
+      "validated": true
+    }
+  ]
+}

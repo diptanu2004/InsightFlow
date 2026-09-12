@@ -1,0 +1,49 @@
+[project]
+name = "insightflow"
+version = "0.1.0"
+description = "InsightFlow POC 2 - Analytics Engine"
+requires-python = ">=3.11"
+# Deliberately no langchain/langchain-groq here — POC 2 has no LLM dependency by design
+# (hld.md: "No LLM dependency"). If an LLM import shows up in this POC later, that's a scope
+# violation, not a missing dependency. (python-dotenv IS a real dependency, for config.py's
+# load_dotenv() — it's unrelated to the no-LLM rule.)
+#
+# duckdb/pydantic/sqlglot are still listed directly even though insightflow-core (below) also
+# depends on them -- POC 2's own code (registry/bootstrap.py, evaluation/, tests/) imports
+# pydantic and duckdb directly too, not just through the engine package, so this stays an
+# explicit direct dependency rather than something to strip out "because it's transitive now."
+dependencies = [
+    "duckdb>=1.1",
+    "pydantic>=2.7",
+    "sqlglot>=25.0",
+    "python-dotenv>=1.0",
+    "insightflow-core",
+]
+
+[tool.uv.sources]
+# Local, editable, path-based -- NOT a uv workspace (a workspace would merge this POC's venv/
+# lockfile with insightflow-core's and poc3_dashboard_generation's, which is exactly the "no
+# shared virtual environment between POCs" constraint this project has kept since POC 1). A plain
+# path source keeps this POC's venv fully independent; it just installs one shared package into
+# it editable, instead of hand-vendoring that package's source a second time. See
+# insightflow_core/README.md for the full rationale.
+insightflow-core = { path = "../insightflow_core", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+# Without this, pytest's default collection glob ("test_*.py", "*_test.py") also matches
+# examples/*/run_*_test.py -- harmless while every such script had a unique basename, but
+# poc3_dashboard_generation hit a real "import file mismatch" crash once two of its example
+# scripts shared a basename across folders (no __init__.py in examples/, so pytest's default
+# "prepend" import mode can't tell them apart). Applying the same fix here pre-emptively -- real
+# tests only ever lived in tests/ anyway; restricting collection there is the actual fix.
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insightflow"]

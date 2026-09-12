@@ -1,0 +1,98 @@
+{
+  "expected_mappings": [
+    {
+      "source_file": "orders",
+      "source_column": "txn",
+      "semantic_type": "order_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "purchase_dt",
+      "semantic_type": "transaction_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "net_amt",
+      "semantic_type": "revenue",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "client",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "sku",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "client",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "full_nm",
+      "semantic_type": "customer_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "geo",
+      "semantic_type": "region",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "join_dt",
+      "semantic_type": "signup_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "sku",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "item_lbl",
+      "semantic_type": "product_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "dept",
+      "semantic_type": "category",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "unit_px",
+      "semantic_type": "price",
+      "confidence": 1.0
+    }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.client",
+      "to_field": "customers.client",
+      "confidence": 1.0,
+      "direction": "orders.client -> customers.client",
+      "validated": true
+    },
+    {
+      "from_field": "orders.sku",
+      "to_field": "products.sku",
+      "confidence": 1.0,
+      "direction": "orders.sku -> products.sku",
+      "validated": true
+    }
+  ]
+}

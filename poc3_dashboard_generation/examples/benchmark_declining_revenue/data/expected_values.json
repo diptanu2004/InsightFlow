@@ -1,0 +1,16 @@
+{
+  "reference_date": "2025-08-28",
+  "total_revenue": 93963.08,
+  "total_orders": 1327,
+  "total_customers": 515,
+  "revenue_growth": -0.37756730197142824,
+  "order_growth": -0.4397031539888683,
+  "customer_growth": -0.3076923076923077,
+  "repeat_purchase_rate": 0.5631,
+  "category_revenue": {
+    "Home": 28644.36,
+    "Apparel": 28381.0,
+    "Electronics": 21153.19,
+    "Grocery": 15784.53
+  }
+}

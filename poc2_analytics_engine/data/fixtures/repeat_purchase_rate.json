@@ -1,0 +1,6 @@
+{
+  "name": "repeat_purchase_rate",
+  "query": {"operation": "aggregate", "metric": "repeat_purchase_rate"},
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 0.5
+}

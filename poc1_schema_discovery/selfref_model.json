@@ -1,0 +1,28 @@
+{
+  "entities": [
+    {
+      "name": "customers",
+      "fields": [
+        {
+          "name": "customer_id",
+          "source_column": "customer_id",
+          "source_file": "customers",
+          "confidence": 0.99
+        },
+        {
+          "name": "customer_name",
+          "source_column": "customer_name",
+          "source_file": "customers",
+          "confidence": 0.98
+        },
+        {
+          "name": "unknown",
+          "source_column": "referred_by_customer_id",
+          "source_file": "customers",
+          "confidence": 0.2
+        }
+      ]
+    }
+  ],
+  "relationships": []
+}

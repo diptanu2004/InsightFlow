@@ -1,0 +1,15 @@
+{
+  "name": "regional_performance",
+  "query": {
+    "operation": "group_by",
+    "metric": "revenue",
+    "dimension": "region",
+    "sort": {"field": "region", "direction": "asc"}
+  },
+  "dataset_dir": "data/raw/sample",
+  "expected_value": [
+    {"region": "North", "value": 380.0},
+    {"region": "South", "value": 320.0},
+    {"region": "West", "value": 90.0}
+  ]
+}

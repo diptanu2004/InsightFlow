@@ -1,0 +1,98 @@
+{
+  "expected_mappings": [
+    {
+      "source_file": "orders",
+      "source_column": "order_id",
+      "semantic_type": "order_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "transaction_date",
+      "semantic_type": "transaction_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "revenue",
+      "semantic_type": "revenue",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "customer_id",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "product_id",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "customer_id",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "customer_name",
+      "semantic_type": "customer_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "region",
+      "semantic_type": "region",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "signup_date",
+      "semantic_type": "signup_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "product_id",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "product_name",
+      "semantic_type": "product_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "category",
+      "semantic_type": "category",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "price",
+      "semantic_type": "price",
+      "confidence": 1.0
+    }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.customer_id",
+      "to_field": "customers.customer_id",
+      "confidence": 1.0,
+      "direction": "orders.customer_id -> customers.customer_id",
+      "validated": true
+    },
+    {
+      "from_field": "orders.product_id",
+      "to_field": "products.product_id",
+      "confidence": 1.0,
+      "direction": "orders.product_id -> products.product_id",
+      "validated": true
+    }
+  ]
+}

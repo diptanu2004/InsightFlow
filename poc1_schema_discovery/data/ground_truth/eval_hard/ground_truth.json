@@ -1,0 +1,110 @@
+{
+  "expected_mappings": [
+    {
+      "source_file": "orders",
+      "source_column": "receipt_no",
+      "semantic_type": "order_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "bought_on",
+      "semantic_type": "transaction_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "gross_value",
+      "semantic_type": "revenue",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "buyer_ref",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "item_ref",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "orders",
+      "source_column": "notes",
+      "semantic_type": "unknown",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "cust_ref",
+      "semantic_type": "customer_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "name",
+      "semantic_type": "customer_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "territory",
+      "semantic_type": "region",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "enrolled_on",
+      "semantic_type": "signup_date",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "customers",
+      "source_column": "vip_tag",
+      "semantic_type": "unknown",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "catalog_key",
+      "semantic_type": "product_id",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "title_txt",
+      "semantic_type": "product_name",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "segment",
+      "semantic_type": "category",
+      "confidence": 1.0
+    },
+    {
+      "source_file": "products",
+      "source_column": "list_cost",
+      "semantic_type": "price",
+      "confidence": 1.0
+    }
+  ],
+  "expected_relationships": [
+    {
+      "from_field": "orders.buyer_ref",
+      "to_field": "customers.cust_ref",
+      "confidence": 1.0,
+      "direction": "orders.buyer_ref -> customers.cust_ref",
+      "validated": true
+    },
+    {
+      "from_field": "orders.item_ref",
+      "to_field": "products.catalog_key",
+      "confidence": 1.0,
+      "direction": "orders.item_ref -> products.catalog_key",
+      "validated": true
+    }
+  ]
+}

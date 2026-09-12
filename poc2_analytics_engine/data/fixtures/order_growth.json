@@ -1,0 +1,13 @@
+{
+  "name": "order_growth",
+  "query": {
+    "operation": "growth",
+    "metric": "order_growth",
+    "growth": {
+      "current_period": {"start_date": "2026-01-01", "end_date": "2026-02-28"},
+      "comparison_period": {"start_date": "2025-10-01", "end_date": "2025-12-31"}
+    }
+  },
+  "dataset_dir": "data/raw/sample",
+  "expected_value": 1.5
+}

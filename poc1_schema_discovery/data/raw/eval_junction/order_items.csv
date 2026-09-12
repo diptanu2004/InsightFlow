@@ -1,0 +1,11 @@
+order_item_id,order_id,product_id,quantity,unit_price
+OI1,O1,P1,2,12.00
+OI2,O1,P3,1,18.50
+OI3,O2,P2,1,25.00
+OI4,O3,P4,1,34.00
+OI5,O3,P1,3,12.00
+OI6,O4,P2,2,25.00
+OI7,O5,P3,1,18.50
+OI8,O5,P4,1,34.00
+OI9,O6,P1,1,12.00
+OI10,O6,P2,1,25.00

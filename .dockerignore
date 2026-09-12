@@ -1,0 +1,22 @@
+# Top-level .dockerignore, applying to every POC's Docker build now that each POC's Dockerfile
+# builds from this top-level directory as its context (needed so a Dockerfile can COPY in the
+# sibling insightflow_core/ package it depends on — see insightflow_core/README.md and each
+# POC's own Dockerfile comment for why). Docker only ever reads ONE .dockerignore, from the
+# context root, so this replaces poc3_dashboard_generation/.dockerignore (poc2 never had one) —
+# per-POC ignore files stopped being read the moment the build context moved up a level.
+.venv/
+__pycache__/
+.git/
+.env
+*.md
+**/tests/
+*.duckdb
+
+# Each POC's real-Olist example data is multi-MB and never COPY'd into an image anyway (only
+# each POC's own small data/ sample is) — excluded from the build context entirely so it isn't
+# even sent to the Docker daemon. data/ itself is deliberately NOT excluded here: it's the small
+# sample dataset each POC's Dockerfile does COPY in and its README's example commands reference
+# by relative path — a parent-directory exclusion can't be selectively un-excluded once a
+# Dockerfile tries to COPY it back in (learned the hard way during POC 2's closure sweep).
+poc2_analytics_engine/examples/
+poc3_dashboard_generation/examples/

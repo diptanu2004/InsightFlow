@@ -1,0 +1,47 @@
+[project]
+name = "insightflow"
+version = "0.1.0"
+description = "InsightFlow POC 3 - Dashboard Generation"
+requires-python = ">=3.11"
+# Unlike POC 2 (deliberately no LLM), POC 3 has exactly one LLM call — DashboardPlanner — so
+# langchain/langchain-groq are real dependencies here, same provider POC 1 uses (hld.md's
+# "Scope decided so far"). duckdb/pydantic/sqlglot are the shared engine's own dependencies
+# (insightflow-core, below) -- still listed directly since POC 3's own code (dashboard/, tests/)
+# imports pydantic/duckdb directly too, not only through the engine package.
+dependencies = [
+    "duckdb>=1.1",
+    "pydantic>=2.7",
+    "sqlglot>=25.0",
+    "python-dotenv>=1.0",
+    "langchain>=0.3",
+    "langchain-groq>=0.2",
+    "insightflow-core",
+]
+
+[tool.uv.sources]
+# Local, editable, path-based -- NOT a uv workspace, deliberately: see
+# poc2_analytics_engine/pyproject.toml's identical note and insightflow_core/README.md for why
+# (keeps this POC's venv fully independent, just installing one shared package into it instead
+# of hand-vendoring that package's source a second time -- the same vendoring poc3 used to do for
+# the entire engine, plus POC 1's LLMClient, is now reduced to just the LLM client).
+insightflow-core = { path = "../insightflow_core", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+# Without this, pytest's default collection glob ("test_*.py", "*_test.py") also matches
+# examples/*/run_*_test.py -- harmless while every such script had a unique basename, but two
+# scripts sharing one basename in different example folders (both named run_benchmark_test.py,
+# added for the declining-revenue/retention-problem benchmark cases) crash collection with an
+# "import file mismatch" (no __init__.py in examples/, so pytest's default "prepend" import mode
+# can't tell the two apart). Real tests only ever lived in tests/ anyway; restricting collection
+# there is the actual fix, not a workaround for this one pair of filenames.
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insightflow"]
