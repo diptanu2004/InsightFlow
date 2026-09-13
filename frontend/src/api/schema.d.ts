@@ -283,6 +283,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/datasets/{dataset_id}/mapping-decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Mappings
+         * @description Confirm or reject column-to-semantic-type mappings. The engine computes only on "auto" or
+         *     "confirmed" mappings (SemanticModel.trusted), so this is how a person promotes a correct
+         *     low-confidence guess, or vetoes a wrong one POC 1 was sure about.
+         *
+         *     Writes a NEW Dataset row -- same stored files, updated semantic model -- rather than editing this
+         *     one. ResultCache and PipelineCache are only correct because a Dataset row never changes after it's
+         *     created; a new version gets its own cache entries, becomes "the" dataset for the project
+         *     immediately (newest wins), and keeps the previous version intact. One batch is one version.
+         */
+        post: operations["review_mappings_projects__project_id__datasets__dataset_id__mapping_decisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/schema/discover": {
         parameters: {
             query?: never;
@@ -552,6 +579,23 @@ export interface components {
             /** Refresh Token */
             refresh_token: string;
         };
+        /** MappingDecision */
+        MappingDecision: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "confirm" | "reject";
+            /** Source Column */
+            source_column: string;
+            /** Source File */
+            source_file: string;
+        };
+        /** MappingDecisionsRequest */
+        MappingDecisionsRequest: {
+            /** Decisions */
+            decisions: components["schemas"]["MappingDecision"][];
+        };
         /**
          * MeOut
          * @description Identity only. Org membership and roles deliberately aren't duplicated here --
@@ -756,6 +800,12 @@ export interface components {
             source_column: string;
             /** Source File */
             source_file: string;
+            /**
+             * Status
+             * @default auto
+             * @enum {string}
+             */
+            status: "auto" | "needs_confirmation" | "confirmed" | "rejected";
         };
         /** SemanticModel */
         SemanticModel: {
@@ -1428,6 +1478,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_mappings_projects__project_id__datasets__dataset_id__mapping_decisions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dataset_id: string;
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MappingDecisionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"];
                 };
             };
             /** @description Validation Error */

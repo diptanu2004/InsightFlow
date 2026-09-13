@@ -71,6 +71,7 @@ class SchemaDiscoveryPipeline:
                     source_column=m.source_column,
                     source_file=m.source_file,
                     confidence=m.confidence,
+                    status="needs_confirmation" if m.needs_confirmation else "auto",
                 )
             )
         return [Entity(name=file_name, fields=fields) for file_name, fields in grouped.items()]

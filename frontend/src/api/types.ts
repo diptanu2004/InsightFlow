@@ -41,6 +41,8 @@ export type SemanticModel = S['SemanticModel']
 export type Entity = S['Entity']
 export type SemanticField = S['SemanticField']
 export type Relationship = S['Relationship']
+export type FieldStatus = NonNullable<SemanticField['status']>
+export type MappingDecision = S['MappingDecision']
 
 // -- Phase 6/7: tenancy, datasets, async jobs --
 export type OrganizationOut = S['OrganizationOut']

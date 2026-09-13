@@ -1,13 +1,16 @@
+import copy
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from insightflow_core.models import SemanticModel
 
+from insightflow_backend import audit
 from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.auth.rate_limit import rate_limit_llm
 from insightflow_backend.auth.rbac import require_project_role
@@ -126,6 +129,101 @@ def list_datasets(
         .all()
     )
     return [DatasetOut.model_validate(dataset) for dataset in datasets]
+
+
+class MappingDecision(BaseModel):
+    # (source_file, source_column) identifies a mapping: POC 1 emits exactly one per column, and an
+    # entity is one source file.
+    source_file: str
+    source_column: str
+    decision: Literal["confirm", "reject"]
+
+
+class MappingDecisionsRequest(BaseModel):
+    decisions: list[MappingDecision] = Field(min_length=1)
+
+
+@router.post(
+    "/projects/{project_id}/datasets/{dataset_id}/mapping-decisions",
+    response_model=DatasetOut,
+    status_code=201,
+    tags=["schema"],
+)
+def review_mappings(
+    dataset_id: uuid.UUID,
+    body: MappingDecisionsRequest,
+    project: Project = Depends(require_project_role(Role.ANALYST)),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DatasetOut:
+    """Confirm or reject column-to-semantic-type mappings. The engine computes only on "auto" or
+    "confirmed" mappings (SemanticModel.trusted), so this is how a person promotes a correct
+    low-confidence guess, or vetoes a wrong one POC 1 was sure about.
+
+    Writes a NEW Dataset row -- same stored files, updated semantic model -- rather than editing this
+    one. ResultCache and PipelineCache are only correct because a Dataset row never changes after it's
+    created; a new version gets its own cache entries, becomes "the" dataset for the project
+    immediately (newest wins), and keeps the previous version intact. One batch is one version.
+    """
+    dataset = db.query(Dataset).filter(Dataset.id == dataset_id, Dataset.project_id == project.id).first()
+    if dataset is None:
+        raise HTTPException(status_code=404, detail="dataset not found")
+
+    latest = (
+        db.query(Dataset).filter(Dataset.project_id == project.id).order_by(Dataset.created_at.desc()).first()
+    )
+    if latest.id != dataset.id:
+        # Deciding against an older version would build the new one from stale state and silently
+        # discard whatever was decided (or uploaded) since.
+        raise HTTPException(
+            status_code=409,
+            detail=f"a newer version of this project's data exists ({latest.id}); review that one instead",
+        )
+
+    seen: set[tuple[str, str]] = set()
+    for decision in body.decisions:
+        key = (decision.source_file, decision.source_column)
+        if key in seen:
+            raise HTTPException(status_code=422, detail=f"more than one decision for {key[0]}.{key[1]}")
+        seen.add(key)
+
+    model = copy.deepcopy(dataset.semantic_model)
+    fields = {(f["source_file"], f["source_column"]): f for e in model["entities"] for f in e["fields"]}
+    unknown = [f"{d.source_file}.{d.source_column}" for d in body.decisions if (d.source_file, d.source_column) not in fields]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"no mapping for: {', '.join(unknown)}")
+
+    changed = {"confirm": 0, "reject": 0}
+    for decision in body.decisions:
+        field = fields[(decision.source_file, decision.source_column)]
+        status = "confirmed" if decision.decision == "confirm" else "rejected"
+        if field.get("status") != status:
+            field["status"] = status
+            changed[decision.decision] += 1
+    if not any(changed.values()):
+        raise HTTPException(status_code=422, detail="these decisions don't change any mapping")
+
+    new_version = Dataset(
+        project_id=project.id,
+        name=dataset.name,
+        storage_prefix=dataset.storage_prefix,
+        semantic_model=SemanticModel(**model).model_dump(mode="json"),
+        created_by=user.id,
+    )
+    db.add(new_version)
+    db.flush()
+    audit.record(
+        db,
+        org_id=project.org_id,
+        user_id=user.id,
+        action="dataset.mappings_reviewed",
+        resource_type="dataset",
+        resource_id=new_version.id,
+        detail=f"from {dataset.id}: {changed['confirm']} confirmed, {changed['reject']} rejected",
+    )
+    db.commit()
+    db.refresh(new_version)
+    return DatasetOut.model_validate(new_version)
 
 
 @router.get("/projects/{project_id}/schema/jobs/{job_id}", response_model=JobOut, tags=["schema"])

@@ -16,7 +16,15 @@ this docstring used to warn about is gone. If/when Phase 5 (architecture doc §2
 everything into one FastAPI app, POC 1's pipeline could plausibly move into this same package too
 and this mirror would collapse into a real import; until then this is the honest remaining cost.
 """
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+# Whether a column-to-semantic-type mapping may be computed on. POC 1 sets "auto" or
+# "needs_confirmation" at discovery from its own CONFIDENCE_THRESHOLD; a person reviewing the mapping
+# sets "confirmed" or "rejected" (backend's mapping-decisions route).
+FieldStatus = Literal["auto", "needs_confirmation", "confirmed", "rejected"]
+TRUSTED_FIELD_STATUSES: frozenset[str] = frozenset({"auto", "confirmed"})
 
 
 class SemanticField(BaseModel):
@@ -24,6 +32,11 @@ class SemanticField(BaseModel):
     source_column: str
     source_file: str
     confidence: float
+    # Defaults to "auto" only so hand-built fixtures stay terse. Real mappings always carry an explicit
+    # status: POC 1 sets it on every field it emits, and datasets stored before the field existed were
+    # backfilled from confidence by an Alembic data migration -- so no low-confidence mapping becomes
+    # trusted just by being old.
+    status: FieldStatus = "auto"
 
 
 class Entity(BaseModel):
@@ -42,3 +55,31 @@ class Relationship(BaseModel):
 class SemanticModel(BaseModel):
     entities: list[Entity]
     relationships: list[Relationship]
+
+    def trusted(self) -> "SemanticModel":
+        """The view anything that computes numbers should be built on: only mappings that are "auto" or
+        "confirmed". Everything downstream -- FieldResolver, ASTValidator, measure binding, the SQL
+        safety allowlist, planner contexts -- then simply never sees an unreviewed or rejected mapping,
+        rather than each having to remember to skip one.
+
+        Found in Phase 8 M4 on a real 5-file Olist upload: POC 1 mapped `freight_value -> revenue`
+        (40%) and `seller_id -> customer_id` (55%), both below its own confirmation threshold. Treated
+        as facts, they landed on the same entity, measure binding co-located AOV onto them, and the
+        engine returned 22.82 where the true value is 160.99 -- a deterministic number built on an
+        unconfirmed guess.
+
+        An entity left with no trusted fields is dropped (QueryExecutor can't register a view for it
+        anyway), and so is any relationship touching one.
+        """
+        entities = [
+            Entity(name=e.name, fields=[f for f in e.fields if f.status in TRUSTED_FIELD_STATUSES])
+            for e in self.entities
+        ]
+        entities = [e for e in entities if e.fields]
+        kept = {e.name for e in entities}
+        relationships = [
+            r
+            for r in self.relationships
+            if r.from_field.partition(".")[0] in kept and r.to_field.partition(".")[0] in kept
+        ]
+        return SemanticModel(entities=entities, relationships=relationships)

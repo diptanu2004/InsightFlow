@@ -594,6 +594,50 @@
         "title": "LogoutRequest",
         "type": "object"
       },
+      "MappingDecision": {
+        "properties": {
+          "decision": {
+            "enum": [
+              "confirm",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "source_column": {
+            "title": "Source Column",
+            "type": "string"
+          },
+          "source_file": {
+            "title": "Source File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_file",
+          "source_column",
+          "decision"
+        ],
+        "title": "MappingDecision",
+        "type": "object"
+      },
+      "MappingDecisionsRequest": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/MappingDecision"
+            },
+            "minItems": 1,
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "decisions"
+        ],
+        "title": "MappingDecisionsRequest",
+        "type": "object"
+      },
       "MeOut": {
         "description": "Identity only. Org membership and roles deliberately aren't duplicated here --\nGET /organizations already returns every org the caller belongs to with its `my_role`, and\ntwo sources for the same RBAC fact is how they drift apart.",
         "properties": {
@@ -996,6 +1040,17 @@
           },
           "source_file": {
             "title": "Source File",
+            "type": "string"
+          },
+          "status": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "needs_confirmation",
+              "confirmed",
+              "rejected"
+            ],
+            "title": "Status",
             "type": "string"
           }
         },
@@ -1990,6 +2045,70 @@
           }
         },
         "summary": "List Datasets",
+        "tags": [
+          "schema"
+        ]
+      }
+    },
+    "/projects/{project_id}/datasets/{dataset_id}/mapping-decisions": {
+      "post": {
+        "description": "Confirm or reject column-to-semantic-type mappings. The engine computes only on \"auto\" or\n\"confirmed\" mappings (SemanticModel.trusted), so this is how a person promotes a correct\nlow-confidence guess, or vetoes a wrong one POC 1 was sure about.\n\nWrites a NEW Dataset row -- same stored files, updated semantic model -- rather than editing this\none. ResultCache and PipelineCache are only correct because a Dataset row never changes after it's\ncreated; a new version gets its own cache entries, becomes \"the\" dataset for the project\nimmediately (newest wins), and keeps the previous version intact. One batch is one version.",
+        "operationId": "review_mappings_projects__project_id__datasets__dataset_id__mapping_decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MappingDecisionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Mappings",
         "tags": [
           "schema"
         ]

@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { postForm, postJson, request } from './client'
-import type { DatasetOut, JobOut, OrganizationOut, ProjectOut } from './types'
+import type { DatasetOut, JobOut, MappingDecision, OrganizationOut, ProjectOut } from './types'
 
 const ORGANIZATIONS_KEY = ['organizations']
 
@@ -81,6 +81,19 @@ export function useUploadDataset(projectId: string | undefined) {
       // worker (Phase 7 M3). Poll with `useDiscoveryJob`.
       return postForm<JobOut>(`/projects/${projectId}/schema/discover`, form)
     },
+  })
+}
+
+/**
+ * Submits one batch of confirm/reject decisions. The backend answers with a NEW dataset version (the
+ * old row is never edited -- result caches rely on that), which becomes the project's active dataset.
+ */
+export function useReviewMappings(projectId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ datasetId, decisions }: { datasetId: string; decisions: MappingDecision[] }) =>
+      postJson<DatasetOut>(`/projects/${projectId}/datasets/${datasetId}/mapping-decisions`, { decisions }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }),
   })
 }
 

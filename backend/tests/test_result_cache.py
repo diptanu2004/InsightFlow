@@ -139,3 +139,17 @@ def test_repeated_requests_after_upload_never_recompute(committing_client, monke
     r3 = client.post(f"/projects/{project['id']}/analytics/query", json=other_query, headers=_auth(token))
     assert r3.status_code == 200, r3.text
     assert engine_calls["n"] > engine_calls_before_new_query
+
+
+def test_changing_the_computation_version_changes_every_key(monkeypatch):
+    """Phase 8 M4: Dataset immutability covers the data, not the rules for computing on it. After a
+    change to measure binding, this cache kept serving an AOV of 22.82 for a dataset whose correct
+    answer is 160.99 -- same dataset_id, same request, same key. The version is what makes the key
+    differ once the rules do."""
+    import insightflow_backend.cache as cache_module
+
+    dataset_id = uuid.uuid4()
+    before = build_cache_key(dataset_id, "analytics_query", {"metric": "aov"})
+    monkeypatch.setattr(cache_module, "COMPUTATION_VERSION", cache_module.COMPUTATION_VERSION + 1)
+    after = cache_module.build_cache_key(dataset_id, "analytics_query", {"metric": "aov"})
+    assert before != after

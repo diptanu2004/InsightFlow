@@ -85,14 +85,22 @@ export default function ProjectPage() {
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-sm font-medium text-slate-900">{activeDataset.name}</h3>
               <span className="text-xs text-slate-500">
-                uploaded {new Date(activeDataset.created_at).toLocaleString()}
+                saved {new Date(activeDataset.created_at).toLocaleString()}
                 {datasets.data && datasets.data.length > 1 && (
-                  <> · {datasets.data.length - 1} earlier upload{datasets.data.length === 2 ? '' : 's'}</>
+                  <> · {datasets.data.length - 1} earlier version{datasets.data.length === 2 ? '' : 's'}</>
                 )}
               </span>
             </div>
             <div className="mt-3">
-              <SemanticModelView model={activeDataset.semantic_model} />
+              <SemanticModelView
+                // Keyed by dataset id: saving a review creates a new version, and remounting resets
+                // the staged decisions that belonged to the version they were made against.
+                key={activeDataset.id}
+                model={activeDataset.semantic_model}
+                projectId={activeDataset.project_id}
+                datasetId={activeDataset.id}
+                canReview={canUpload}
+              />
             </div>
           </div>
         )}

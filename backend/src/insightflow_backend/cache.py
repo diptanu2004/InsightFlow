@@ -5,19 +5,29 @@ replaces the earlier idea of sharing `PipelineCache` itself via Redis: a DuckDB 
 pipeline object can't cross a process boundary through Redis, but a `MetricResult`/
 `HydratedDashboard`/`Answer` can.
 
-A `Dataset` row is immutable once created (a re-upload makes a new row -- db/models.py), so a
-cache hit is correct for as long as it lives; the TTL below exists only to bound Redis memory
-growth, not for correctness -- nothing here ever needs explicit invalidation.
+A `Dataset` row is immutable once created (a re-upload or a mapping review makes a new row --
+db/models.py), so the *data* behind a key never changes. But the *rules for computing on it* can:
+Phase 8 M4 changed which mappings the engine may use and how measures bind to entities, and
+afterwards this cache kept serving an AOV of 22.82 computed under the old rules for a dataset whose
+correct answer is 160.99. So a cached result is correct only for the dataset AND the computation
+rules that produced it -- `COMPUTATION_VERSION` below is the second half of that, and the TTL only
+bounds Redis memory.
 """
 import hashlib
 import json
 
 import redis
 
+# Bump whenever a change alters the number, dashboard or answer produced for an unchanged dataset
+# (binding rules, which mappings are trusted, compiler semantics, a registry definition). Old entries
+# are then never read again and simply expire -- no flush needed on deploy.
+#   2 -- Phase 8 M4: per-dataset measure binding; engine computes only on trusted mappings.
+COMPUTATION_VERSION = 2
+
 
 def build_cache_key(dataset_id, route: str, payload: dict) -> str:
     canonical = json.dumps(payload, sort_keys=True, default=str)
-    return hashlib.sha256(f"{dataset_id}:{route}:{canonical}".encode()).hexdigest()
+    return hashlib.sha256(f"v{COMPUTATION_VERSION}:{dataset_id}:{route}:{canonical}".encode()).hexdigest()
 
 
 class ResultCache:

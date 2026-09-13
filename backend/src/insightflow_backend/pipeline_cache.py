@@ -46,6 +46,14 @@ def _required_filenames(semantic_model: CoreSemanticModel) -> set[str]:
     return names
 
 
+def _computable_model(dataset: Dataset) -> CoreSemanticModel:
+    """What every pipeline here is built on: the dataset's semantic model with unreviewed and rejected
+    mappings removed (SemanticModel.trusted). Phase 8 M4 found POC 1's unconfirmed guesses producing a
+    confidently wrong AOV (22.82 vs a true 160.99) on a real upload once they reached the engine. The
+    full model, flags included, is still what GET .../datasets returns -- for the review UI."""
+    return CoreSemanticModel(**dataset.semantic_model).trusted()
+
+
 class PipelineCache:
     def __init__(self, storage: ObjectStorage, max_datasets: int = 16) -> None:
         self._storage = storage
@@ -65,7 +73,7 @@ class PipelineCache:
             self._entries.move_to_end(dataset.id)
             return entry
 
-        semantic_model = CoreSemanticModel(**dataset.semantic_model)
+        semantic_model = _computable_model(dataset)
         entry = _CacheEntry(data_dir=self._materialize_local_files(dataset, semantic_model))
         self._entries[dataset.id] = entry
         if len(self._entries) > self._max_datasets:
@@ -78,21 +86,21 @@ class PipelineCache:
     def get_or_build_engine(self, dataset: Dataset) -> AnalyticsEnginePipeline:
         entry = self._get_entry(dataset)
         if entry.engine is None:
-            semantic_model = CoreSemanticModel(**dataset.semantic_model)
+            semantic_model = _computable_model(dataset)
             entry.engine = wiring.build_analytics_engine(semantic_model, str(entry.data_dir))
         return entry.engine
 
     def get_or_build_dashboard(self, dataset: Dataset):
         entry = self._get_entry(dataset)
         if entry.dashboard_pipeline is None:
-            semantic_model = CoreSemanticModel(**dataset.semantic_model)
+            semantic_model = _computable_model(dataset)
             entry.dashboard_pipeline = wiring.build_dashboard(semantic_model, str(entry.data_dir))
         return entry.dashboard_pipeline
 
     def get_or_build_chat(self, dataset: Dataset):
         entry = self._get_entry(dataset)
         if entry.chat_pipeline is None:
-            semantic_model = CoreSemanticModel(**dataset.semantic_model)
+            semantic_model = _computable_model(dataset)
             engine = self.get_or_build_engine(dataset)
             entry.chat_pipeline = wiring.build_chatbot(semantic_model, str(entry.data_dir), engine)
         return entry.chat_pipeline
