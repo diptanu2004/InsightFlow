@@ -91,3 +91,38 @@ def test_logout_is_idempotent(client):
     tokens = _register(client).json()
     assert client.post("/auth/logout", json={"refresh_token": tokens["refresh_token"]}).status_code == 204
     assert client.post("/auth/logout", json={"refresh_token": tokens["refresh_token"]}).status_code == 204
+
+
+@requires_postgres
+def test_me_returns_the_authenticated_user(client):
+    tokens = _register(client).json()
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {tokens['access_token']}"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["email"] == EMAIL
+    assert body["id"]
+    assert body["created_at"]
+    # Identity only -- org membership/roles come from GET /organizations, and duplicating an RBAC
+    # fact in two places is how the two drift apart.
+    assert "role" not in body and "memberships" not in body
+
+
+@requires_postgres
+def test_me_without_a_token_rejected(client):
+    assert client.get("/auth/me").status_code == 401
+
+
+@requires_postgres
+def test_me_with_garbage_token_rejected(client):
+    r = client.get("/auth/me", headers={"Authorization": "Bearer not.a.jwt"})
+    assert r.status_code == 401
+
+
+@requires_postgres
+def test_me_after_access_token_issued_by_refresh(client):
+    """The frontend calls /auth/me with a token that came from /auth/refresh, not just login."""
+    tokens = _register(client).json()
+    refreshed = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).json()
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {refreshed['access_token']}"})
+    assert r.status_code == 200, r.text
+    assert r.json()["email"] == EMAIL

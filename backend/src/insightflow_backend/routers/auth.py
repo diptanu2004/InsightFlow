@@ -1,9 +1,11 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, field_validator
 from sqlalchemy.orm import Session
 
+from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.auth.jwt import create_access_token, generate_refresh_token, hash_refresh_token
 from insightflow_backend.auth.passwords import MAX_PASSWORD_BYTES, hash_password, verify_password
 from insightflow_backend.auth.rate_limit import rate_limit_auth
@@ -44,6 +46,17 @@ class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class MeOut(BaseModel):
+    """Identity only. Org membership and roles deliberately aren't duplicated here --
+    GET /organizations already returns every org the caller belongs to with its `my_role`, and
+    two sources for the same RBAC fact is how they drift apart.
+    """
+
+    id: uuid.UUID
+    email: str
+    created_at: datetime
 
 
 def _issue_token_pair(db: Session, user: User) -> TokenPair:
@@ -106,3 +119,16 @@ def logout(body: LogoutRequest, db: Session = Depends(get_db)) -> None:
         db.commit()
     # Logout is idempotent -- an already-revoked or unknown token still returns 204, same as
     # calling logout twice should be harmless rather than a client-visible error.
+
+
+@router.get("/me", response_model=MeOut)
+def me(user: User = Depends(get_current_user)) -> MeOut:
+    """Resolve the bearer of an access token. Added in Phase 8 so the frontend never has to
+    decode a JWT client-side to find out who it's logged in as.
+
+    Deliberately not behind `rate_limit_auth` (unlike /register and /login): that bucket is
+    keyed by client IP with a low cap meant to blunt credential stuffing, and this route is hit
+    on every app load and every token refresh -- rate-limiting it would throttle normal use,
+    and it's not a credential-guessing surface (an attacker needs a valid token already).
+    """
+    return MeOut(id=user.id, email=user.email, created_at=user.created_at)
