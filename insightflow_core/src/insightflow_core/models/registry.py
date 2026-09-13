@@ -20,12 +20,28 @@ class AggregationType(str, Enum):
 
 
 class Measure(BaseModel):
-    """A Tier 1 measure: a raw, aggregatable field drawn from the Semantic Model."""
+    """A Tier 1 measure: a raw, aggregatable field drawn from the Semantic Model.
+
+    `entity` is an optional pin, not a requirement. Unset, the entity is resolved per dataset from
+    whichever entity carries `source_field` (see compilation/measure_binding.py) -- which is what
+    lets one registry run against any upload. POC 1 names entities after source *filenames*, so a
+    registry that hardcoded `entity="orders"` only ever worked for a file literally named
+    orders.csv (found in Phase 8 M4 against the real Kaggle Olist files). Set it only to settle a
+    genuine ambiguity by hand; a pin naming an entity the dataset lacks makes the measure
+    unresolvable there rather than silently falling back to field lookup.
+    """
 
     name: str
-    entity: str
+    entity: Optional[str] = None
     source_field: str
     aggregation: AggregationType
+    # Which population this measure counts, named by a semantic field rather than an entity, so it
+    # stays dataset-independent. Only consulted when `source_field` is on more than one entity:
+    # key columns sit on both sides of every relationship, so `COUNT(DISTINCT customer_id)` on
+    # `orders` means "customers who ordered" while on `customers` it means "every customer on
+    # file". `colocate_with_field="order_id"` says the former. It narrows, never widens -- if no
+    # candidate entity carries this field, the measure stays ambiguous and is refused.
+    colocate_with_field: Optional[str] = None
 
 
 class MetricKind(str, Enum):

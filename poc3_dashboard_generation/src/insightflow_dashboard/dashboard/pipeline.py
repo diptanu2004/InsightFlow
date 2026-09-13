@@ -26,7 +26,12 @@ from insightflow_core.pipeline import AnalyticsEnginePipeline
 from insightflow_dashboard.registry import MetricRegistry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
-from insightflow_core.validation.metric_resolvability import resolvable_metric_names, unresolvable_reason
+from insightflow_core.compilation.measure_binding import bind_measure
+from insightflow_core.validation.metric_resolvability import (
+    group_by_problem,
+    resolvable_metric_names,
+    unresolvable_reason,
+)
 
 
 class DashboardGenerationPipeline:
@@ -97,7 +102,13 @@ class DashboardGenerationPipeline:
         # semantic model is never shown to the planner. DashboardValidator re-checks it anyway.
         runnable = resolvable_metric_names(self.registry, self.semantic_model)
         metrics = [
-            MetricSummary(name=name, kind="measure", description=f"raw measure on {measure.entity}")
+            # The bound entity, not `measure.entity` -- that's an optional pin and usually unset.
+            # Every runnable bare measure binds on its own, so bind_measure can't raise here.
+            MetricSummary(
+                name=name,
+                kind="measure",
+                description=f"raw measure on {bind_measure(measure, self.semantic_model).entity}",
+            )
             for name, measure in self.registry.measures.items()
             if name in runnable
         ] + [
@@ -113,7 +124,20 @@ class DashboardGenerationPipeline:
         # real LLM call on a spec the validator was always going to reject. Precomputed here so the
         # prompt can state the constraint explicitly instead of expecting the LLM to infer it from
         # each metric's kind string.
-        groupable_metrics = [m.name for m in metrics if m.kind in ("measure", "base")]
+        # Each candidate paired only with dimensions the engine can actually join it to, using the
+        # SAME group_by_problem check DashboardValidator re-applies to the returned spec. A metric
+        # with no joinable dimension at all isn't groupable on this dataset, whatever its kind.
+        groupable_dimensions = {
+            m.name: joinable
+            for m in metrics
+            if m.kind in ("measure", "base")
+            and (
+                joinable := [
+                    d for d in dimensions if group_by_problem(m.name, d, self.registry, self.semantic_model) is None
+                ]
+            )
+        }
+        groupable_metrics = list(groupable_dimensions)
         # Found via a third real Groq/real-Olist run (see planner_context.py's field comment):
         # DashboardDataResolver can't resolve a GROWTH-kind metric as ANY component, not just a
         # grouping one -- growth metrics need an explicit comparison-period pair nothing in
@@ -129,6 +153,7 @@ class DashboardGenerationPipeline:
             signals=signals,
             supported_component_types=sorted(SUPPORTED_COMPONENT_TYPES, key=lambda t: t.value),
             groupable_metrics=groupable_metrics,
+            groupable_dimensions=groupable_dimensions,
             resolvable_metrics=resolvable_metrics,
         )
 

@@ -1,12 +1,18 @@
-# Canonical copy for the merged Phase 5 backend. Byte-identical to the vendored copies that
-# still live in poc2_analytics_engine/, poc3_dashboard_generation/, and poc4_nl_chatbot/ (each
-# POC keeps its own local copy so its own standalone test suite keeps passing independently of
-# this package -- see CLAUDE.md's Part C note on why those 3 copies are intentionally NOT deleted).
-# This is the one bootstrap_registry() the backend itself ever imports.
-"""Registers the five target metrics from docs/supported_metrics.md into a fresh MetricRegistry.
+# Canonical copy for the merged Phase 5 backend -- the one bootstrap_registry() the backend itself
+# ever imports. The vendored copies in poc2_analytics_engine/, poc3_dashboard_generation/ and
+# poc4_nl_chatbot/ intentionally stay (each POC's standalone tests import its own) and still pin
+# `entity="orders"`, which keeps working against their own sample data. This copy no longer does.
+"""Registers the target metrics from docs/supported_metrics.md into a fresh MetricRegistry.
 
-Assumes an `orders` entity with fields `order_id`, `customer_id`, `revenue`, `transaction_date`
-(POC 1's real canonical vocabulary name for dates -- see `data/semantic_model.json`).
+Measures name semantic *fields* only, never an entity. Which entity carries `revenue` or `order_id`
+is a property of the uploaded dataset, resolved per dataset by insightflow_core's measure binding.
+Until Phase 8 M4 every measure here was pinned to `entity="orders"`, which only exists when an
+upload's file is literally named orders.csv -- POC 1 names entities after source filenames -- so
+every real upload (the Kaggle Olist files first) made query, dashboard and chat fail.
+
+Don't add entity pins back to make one dataset work: a pin that names an entity another upload
+lacks makes the measure unresolvable there. Ambiguity is refused per dataset instead (a field on
+more than one entity with no sibling measure to co-locate with), which is the honest outcome.
 """
 from insightflow_core.models import AggregationType, HavingClause, MetricDefinition, MetricKind
 from insightflow_core.models.registry import Measure
@@ -17,13 +23,42 @@ def bootstrap_registry() -> MetricRegistry:
     registry = MetricRegistry()
 
     # Tier 1: measures (raw aggregatable fields)
-    registry.register_measure(Measure(name="revenue", entity="orders", source_field="revenue", aggregation=AggregationType.SUM))
-    registry.register_measure(Measure(name="orders", entity="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT))
-    registry.register_measure(Measure(name="customers", entity="orders", source_field="customer_id", aggregation=AggregationType.COUNT_DISTINCT))
+    #
+    # Key columns sit on both sides of every relationship, so a COUNT DISTINCT of a key is
+    # ambiguous on any normalized upload until the measure says which population it counts --
+    # by naming another semantic field, never an entity (see Measure.colocate_with_field):
+    #   orders    -> order_id where customer_id lives: the order header table, not line items or
+    #                payments (Olist carries order_id on orders, order_items, payments and reviews).
+    #   customers -> customer_id where order_id lives: customers who ordered, not every customer on
+    #                file (customer_id is on both orders and customers, in the sample data too).
+    # A hint only narrows a genuinely ambiguous field. On an upload with no orders table at all,
+    # `customers` falls back to the only entity carrying customer_id -- all customers on file.
+    registry.register_measure(Measure(name="revenue", source_field="revenue", aggregation=AggregationType.SUM))
+    registry.register_measure(
+        Measure(
+            name="orders",
+            source_field="order_id",
+            aggregation=AggregationType.COUNT_DISTINCT,
+            colocate_with_field="customer_id",
+        )
+    )
+    registry.register_measure(
+        Measure(
+            name="customers",
+            source_field="customer_id",
+            aggregation=AggregationType.COUNT_DISTINCT,
+            colocate_with_field="order_id",
+        )
+    )
     # Same underlying column as "orders", but registered separately: this one is meant to be
     # aggregated *per customer* (see repeat_purchase_rate's GROUP BY), not across the whole table.
     registry.register_measure(
-        Measure(name="orders_per_customer", entity="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT)
+        Measure(
+            name="orders_per_customer",
+            source_field="order_id",
+            aggregation=AggregationType.COUNT_DISTINCT,
+            colocate_with_field="customer_id",
+        )
     )
 
     # Tier 2: named metrics

@@ -1,10 +1,12 @@
+from insightflow_core.compilation.field_resolver import FieldResolver
+from insightflow_core.compilation.measure_binding import UnresolvableMeasure, bind_metric
 from insightflow_core.compilation.sql_compiler import SQLCompiler
 from insightflow_core.models import AnalyticalQuery, OperationType, TimeFilter, ValidationError, ValidationResult
 from insightflow_core.models.query import HavingClause
 from insightflow_core.models.registry import MetricKind
 from insightflow_core.models.semantic_model import SemanticModel
 from insightflow_core.registry import MetricRegistry
-from insightflow_core.validation.metric_resolvability import unresolvable_reason
+from insightflow_core.validation.metric_resolvability import join_problem, unresolvable_reason
 
 # Sanity bound against absurd ranges (e.g. a typo'd year). TimeFilter's own validator already
 # enforces start_date <= end_date; this is a *semantic* check on top of that structural one.
@@ -31,6 +33,7 @@ class ASTValidator:
             errors += self._validate_dimension(query.dimension)
         if query.operation == OperationType.GROUP_BY and query.dimension is not None:
             errors += self._validate_group_by_supported(query.metric)
+            errors += self._validate_group_by_join_path(query.metric, query.dimension)
         if query.time_filter is not None:
             errors += self._validate_time_filter(query.time_filter)
             errors += self._validate_time_filter_supported(query.metric)
@@ -117,6 +120,29 @@ class ASTValidator:
             ]
         return []
 
+    def _validate_group_by_join_path(self, metric: str, dimension: str) -> list[ValidationError]:
+        # Same class of gap as the checks around it: _compile_grouped_base joins the measure's
+        # entity to the dimension's over a single-hop relationship and raises ValueError mid-compile
+        # when there isn't one. Latent while every registry pinned measures to one sample-shaped
+        # `orders` entity; reachable as soon as measures bind per dataset (Phase 8 M4) -- on the real
+        # Olist upload, revenue lives on payments and category on products, two hops apart.
+        # Only reported once the metric binds, is groupable, and the dimension is unambiguous; each
+        # of those failures already has its own error code above.
+        if not self.registry.is_registered(metric):
+            return []
+        resolved = self.registry.resolve(metric)
+        if getattr(resolved, "kind", None) not in (None, MetricKind.BASE):
+            return []
+        try:
+            measure_entity = bind_metric(resolved, self.registry, self.semantic_model).measures["base"].entity
+            dimension_entity = FieldResolver(self.semantic_model).find_entity_for_field(dimension)
+        except (UnresolvableMeasure, KeyError, ValueError):
+            return []
+        problem = join_problem(measure_entity, dimension, dimension_entity, self.semantic_model)
+        if problem is None:
+            return []
+        return [ValidationError(code="no_join_path", message=problem, field="dimension")]
+
     def _validate_time_filter_supported(self, metric: str) -> list[ValidationError]:
         # Same class of gap as _validate_group_by_supported, found the same way (closure sweep,
         # not an earlier real-data test -- no fixture or example ever combined a time_filter with
@@ -159,21 +185,16 @@ class ASTValidator:
             return []
         resolved = self.registry.resolve(metric)
         kind = getattr(resolved, "kind", None)
-
-        entities: list[str] = []
-        if kind is None:
-            # A bare Measure, always BASE-shaped.
-            entities = [resolved.entity]
-        elif kind == MetricKind.BASE:
-            base = self.registry.resolve(resolved.base_measure)
-            entities = [base.entity]
-        elif kind == MetricKind.RATIO:
-            numerator = self.registry.resolve(resolved.numerator_measure)
-            denominator = self.registry.resolve(resolved.denominator_measure)
-            entities = [numerator.entity, denominator.entity]
         # HAVING_RATIO is already rejected outright by _validate_time_filter_supported above;
         # GROWTH can never carry a time_filter at all (AnalyticalQuery's own validator forbids
         # setting both `time_filter` and `growth`) -- neither needs a check here.
+        if kind not in (None, MetricKind.BASE, MetricKind.RATIO):
+            return []
+        try:
+            # The entities the compiler will actually filter on for this dataset.
+            entities = [m.entity for m in bind_metric(resolved, self.registry, self.semantic_model).measures.values()]
+        except UnresolvableMeasure:
+            return []  # already reported by _validate_metric as unresolvable_metric
 
         missing = [
             e
@@ -233,10 +254,13 @@ class ASTValidator:
         if self.registry.is_registered(query.metric):
             resolved = self.registry.resolve(query.metric)
             base_measure_name = getattr(resolved, "base_measure", None)
-            if base_measure_name and self.registry.is_registered(base_measure_name):
-                measure = self.registry.resolve(base_measure_name)
-                entity_name = getattr(measure, "entity", None)
-                has_time_field = entity_name is not None and any(
+            try:
+                bound = bind_metric(resolved, self.registry, self.semantic_model).measures if base_measure_name else {}
+            except UnresolvableMeasure:
+                bound = {}  # already reported by _validate_metric as unresolvable_metric
+            if "base" in bound:
+                entity_name = bound["base"].entity
+                has_time_field = any(
                     e.name == entity_name and any(f.name == SQLCompiler.TIME_FIELD for f in e.fields)
                     for e in self.semantic_model.entities
                 )

@@ -37,7 +37,10 @@ class DashboardPlanner:
         )
         component_types_block = ", ".join(t.value for t in context.supported_component_types)
 
-        groupable_metrics_block = ", ".join(context.groupable_metrics) or "(none)"
+        groupable_block = (
+            "\n".join(f"- {metric}: {', '.join(dims)}" for metric, dims in context.groupable_dimensions.items())
+            or "(none -- this dataset supports no grouped components, so use only kpi components)"
+        )
         resolvable_metrics_block = ", ".join(context.resolvable_metrics) or "(none)"
 
         return (
@@ -46,7 +49,7 @@ class DashboardPlanner:
             "dimensions, and component types listed -- never invent a metric or dimension name "
             "that isn't listed, and never use a component type that isn't listed.\n\n"
             f"Entities in this business's data: {', '.join(context.entities)}\n"
-            f"Available dimensions (usable as a chart's `dimension` field): {', '.join(context.available_dimensions) or '(none)'}\n\n"
+            f"Available dimensions: {', '.join(context.available_dimensions) or '(none)'}\n\n"
             f"Available metrics (for context, including ones you cannot set as a component's "
             f"metric_name -- see below):\n{metrics_block}\n\n"
             f"Metrics usable as any component's `metric_name`: {resolvable_metrics_block}\n"
@@ -54,10 +57,12 @@ class DashboardPlanner:
             "metric_name, in a kpi or any other component -- they can only be referenced by value "
             "from the diagnostic signals below, in a component's rationale or the dashboard's "
             "narrative text.\n\n"
-            f"Metrics usable in a bar_chart, pie_chart, or table (i.e. with a `dimension` set): "
-            f"{groupable_metrics_block}. Any other resolvable metric (kind ratio or having_ratio, "
-            "e.g. an average or a repeat-purchase rate) can ONLY be used in a kpi component, never "
-            "grouped by a dimension.\n\n"
+            "Metrics usable in a bar_chart, pie_chart, or table (i.e. with a `dimension` set), each "
+            "followed by the ONLY dimensions it can be grouped by in this dataset -- any pairing "
+            f"not listed here cannot be computed:\n{groupable_block}\n"
+            "Any other resolvable metric (kind ratio or having_ratio, e.g. an average or a "
+            "repeat-purchase rate) can ONLY be used in a kpi component, never grouped by a "
+            "dimension.\n\n"
             f"Diagnostic signals already computed for this dataset (react to these -- e.g. "
             "emphasize revenue trend and category breakdown if revenue is declining):\n"
             f"{signals_block}\n\n"
@@ -74,8 +79,8 @@ class DashboardPlanner:
             f"Produce between {self.min_components} and {self.max_components} components. Every "
             "component's `metric_name` MUST be one of the metrics usable as a component's "
             "metric_name listed above. Every non-KPI component (bar_chart, pie_chart, table) MUST "
-            "set `dimension` to one of the available dimensions above AND set `metric_name` to one "
-            "of the metrics usable in a grouping component listed above. KPI components MUST NOT "
+            "set `metric_name` to one of the metrics usable in a grouping component listed above "
+            "AND set `dimension` to one of the dimensions listed for THAT metric. KPI components MUST NOT "
             "set `dimension`. Give each component a short, unique, snake_case `component_id`. Set "
             "`rationale` on every component to a one-sentence reason tied to the signals above, and "
             "set the dashboard's own `narrative` to a one- or two-sentence VERDICT on what the data "

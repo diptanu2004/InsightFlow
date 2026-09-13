@@ -16,7 +16,28 @@ from pathlib import Path
 from insightflow_core.models import SemanticModel
 
 
-def infer_date_bounds(semantic_model: SemanticModel, data_dir: str, entity_name: str, time_field: str) -> tuple[date, date]:
+def infer_date_bounds(
+    semantic_model: SemanticModel, data_dir: str, entity_name: str | None, time_field: str
+) -> tuple[date, date]:
+    """`entity_name=None` resolves the entity per dataset: whichever entity carries `time_field`.
+
+    Phase 8 M4: this used to take a fixed entity name from config (`TIME_ENTITY="orders"`), which
+    only existed when a file was literally named orders.csv -- POC 1 names entities after source
+    filenames, so a real upload made chat fail to construct at all. Same no-guessing rule as
+    insightflow_core's measure binding: a field on more than one entity is refused rather than
+    picked, and a configured `entity_name` is the explicit pin that settles it.
+    """
+    if entity_name is None:
+        candidates = [e.name for e in semantic_model.entities if any(f.name == time_field for f in e.fields)]
+        if not candidates:
+            raise ValueError(f'no entity in this dataset has a "{time_field}" field to infer date bounds from')
+        if len(candidates) > 1:
+            raise ValueError(
+                f'"{time_field}" is on more than one entity ({", ".join(candidates)}), so the date range '
+                "for relative time expressions is ambiguous; set TIME_ENTITY to choose one"
+            )
+        entity_name = candidates[0]
+
     entity = next((e for e in semantic_model.entities if e.name == entity_name), None)
     if entity is None:
         raise ValueError(f'no entity named "{entity_name}" in the semantic model')

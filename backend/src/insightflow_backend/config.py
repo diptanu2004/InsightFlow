@@ -31,7 +31,11 @@ class Settings:
     dashboard_max_components: int = int(os.getenv("DASHBOARD_MAX_COMPONENTS", "8"))
 
     # -- from POC 4 --
-    time_entity: str = os.getenv("TIME_ENTITY", "orders")
+    # Unset by default: chat resolves its time entity per dataset (whichever entity carries
+    # TIME_FIELD). A fixed "orders" only existed when an upload's file was literally orders.csv
+    # (POC 1 names entities after filenames). Set it only to settle a dataset where the time field
+    # is on more than one entity -- chat refuses to construct there rather than guessing.
+    time_entity: str | None = os.getenv("TIME_ENTITY") or None
     time_field: str = os.getenv("TIME_FIELD", "transaction_date")
     top_n_category_deltas: int = int(os.getenv("TOP_N_CATEGORY_DELTAS", "3"))
 

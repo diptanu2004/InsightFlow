@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from insightflow_core.compilation import FieldResolver
 from insightflow_core.models import MetricDefinition, MetricKind, SemanticModel
 from insightflow_core.registry import MetricRegistry
+from insightflow_core.compilation.measure_binding import bind_measure
 from insightflow_core.validation.metric_resolvability import resolvable_metric_names
 
 from insightflow_chatbot.models.time_expression import TimeExpression
@@ -59,7 +60,9 @@ def build_planner_context(semantic_model: SemanticModel, registry: MetricRegistr
     # the assembled query regardless, same double-checking as the dimension filter above.
     runnable = resolvable_metric_names(registry, semantic_model)
     metrics = [
-        MetricSummary(name=name, kind="measure", description=f"raw measure on {measure.entity}")
+        # The bound entity, not `measure.entity` -- that's an optional pin and usually unset. Every
+        # runnable bare measure binds on its own, so bind_measure can't raise here.
+        MetricSummary(name=name, kind="measure", description=f"raw measure on {bind_measure(measure, semantic_model).entity}")
         for name, measure in registry.measures.items()
         if name in runnable
     ] + [

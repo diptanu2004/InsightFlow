@@ -10,7 +10,7 @@ from insightflow_dashboard.dashboard.spec import GROUPING_COMPONENT_TYPES, Compo
 from insightflow_dashboard.dashboard.validation_types import DashboardValidationError, DashboardValidationResult
 from insightflow_core.compilation.field_resolver import FieldResolver
 from insightflow_core.models.registry import MetricKind
-from insightflow_core.validation.metric_resolvability import unresolvable_reason
+from insightflow_core.validation.metric_resolvability import group_by_problem, unresolvable_reason
 from insightflow_dashboard.registry import MetricRegistry
 
 # v1 only resolves these component types (docs/hld.md's "In scope" section, docs/class_diagram.md's
@@ -57,6 +57,17 @@ class DashboardValidator:
             errors += self._validate_metric_resolves_on_dataset(component)
             errors += self._validate_metric_directly_resolvable(component)
             errors += self._validate_group_by_supported_for_metric(component)
+        # Last, and only once everything else about this component checked out, so the one thing
+        # left for group_by_problem to report is the join itself rather than a repeat of an earlier
+        # error. The planner is only offered joinable pairs; this catches one it invented anyway.
+        if component.type in GROUPING_COMPONENT_TYPES and component.dimension is not None and not errors:
+            problem = group_by_problem(
+                component.metric_name, component.dimension, self.registry, self.field_resolver.semantic_model
+            )
+            if problem is not None:
+                errors.append(
+                    DashboardValidationError(code="no_join_path", message=problem, component_id=component.component_id)
+                )
         return errors
 
     def _validate_metric_resolves_on_dataset(self, component: ComponentSpec) -> list[DashboardValidationError]:

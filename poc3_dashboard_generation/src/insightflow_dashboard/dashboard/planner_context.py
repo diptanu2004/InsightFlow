@@ -29,6 +29,13 @@ class PlannerContext(BaseModel):
     # supported_component_types) rather than making the planner infer the rule from each metric's
     # `kind` string in the prompt.
     groupable_metrics: list[str] = Field(default_factory=list)
+    # Phase 8 M4: which dimensions each groupable metric can actually be grouped by on THIS
+    # dataset. Offering metrics and dimensions as two independent lists let the planner pair any
+    # of them, but the engine only joins a measure's entity to a dimension's over a single-hop
+    # relationship -- once measures bind per dataset, the real Olist upload puts revenue on
+    # payments and category on products, two hops apart, and one such component fails the whole
+    # dashboard (DashboardValidator rejects the full spec). `groupable_metrics` is exactly the keys.
+    groupable_dimensions: dict[str, list[str]] = Field(default_factory=dict)
     # Found via a third real Groq/real-Olist run (examples/real_olist_integration/README.md's
     # third "real bug found" entry): a subset of available_metrics' names excluding kind "growth"
     # -- DashboardDataResolver has no way to resolve a growth metric as ANY component (not just a

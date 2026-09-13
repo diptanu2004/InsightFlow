@@ -114,8 +114,11 @@ Given arbitrary CSVs (e.g. `orders.csv`, `customers.csv`, `products.csv` with un
 names), profile each column (type, null %, cardinality, sample values, etc.), infer semantic type
 per column with a confidence score, and detect cross-file relationships (FK-like links) using
 name similarity + type compatibility + value overlap + LLM reasoning as a supporting signal only
-— never trusted blindly. Output: a canonical semantic model (`Customer`, `Order`, `Product`
-entities). Low-confidence mappings surface for user confirmation.
+— never trusted blindly. Output: a semantic model with **one entity per source file, named after
+the file's stem** (`olist_order_payments_dataset`, not a canonical `Order`) — earlier versions of
+this file said canonical `Customer`/`Order`/`Product`, which was never what it emitted (found in
+Phase 8 M4). Each field carries `status`: `auto` (at/above POC 1's CONFIDENCE_THRESHOLD) or
+`needs_confirmation`; a person can later set `confirmed`/`rejected` (backend mapping-decisions route).
 Real integration test used Olist dataset.
 
 ### POC 2 — Analytics Engine (done)
@@ -563,3 +566,22 @@ routes to existing pipelines" instead of a rewrite.
   Phase 7 M4, not just a theoretical gap. Don't assume job-status polling alone means a stuck job
   will eventually resolve; there's no watchdog/staleness reconciliation yet (see §6's Phase 7
   section for the fix shape if this becomes a real problem).
+- **Never pin a measure to an entity name in the backend registry.** Entity names come from upload
+  filenames, so `Measure(entity="orders")` only works for a file literally named orders.csv — that
+  broke every real upload until Phase 8 M4. Measures name a semantic field; insightflow_core's
+  `compilation/measure_binding.py` resolves the entity per dataset (field on one entity → there;
+  ambiguous → narrowed by `Measure.colocate_with_field`, then by a ratio's sibling measure; still
+  ambiguous → refused, never guessed). Key counts need a population hint (`customers` counts
+  `customer_id` where `order_id` lives) because keys sit on both sides of every relationship.
+- **Anything that computes numbers must be built on `SemanticModel.trusted()`** (only `auto` +
+  `confirmed` fields) — `backend/pipeline_cache.py` does this. The raw model, flags included, is
+  only for the review UI. Computing on unconfirmed mappings is how a real Olist upload produced an
+  AOV of 22.82 against a true 160.99 (`freight_value → revenue` at 40%).
+- **Bump `COMPUTATION_VERSION` in `backend/cache.py`** whenever a change alters the result for an
+  unchanged dataset (binding rules, trusted-mapping rules, compiler semantics, a registry
+  definition). Dataset immutability covers the data, not the rules — without the bump the result
+  cache kept serving the wrong 22.82 after the fix.
+- A mapping review writes a **new** `Dataset` row (same stored files), never edits one; the newest
+  row is the active dataset. Keep it that way — both caches depend on rows never changing.
+- `uvicorn --reload` has repeatedly failed to pick up changes on this Windows dev machine. After
+  editing backend/core/POC code, restart the server rather than trusting the reloader.

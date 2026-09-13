@@ -74,7 +74,7 @@ def build_question_answering_pipeline(
     llm_client: LLMClient,
     data_dir: str,
     *,
-    time_entity: str = "orders",
+    time_entity: str | None = None,
     time_field: str = "transaction_date",
     max_row_limit: int = 1000,
 ) -> QuestionAnsweringPipeline:

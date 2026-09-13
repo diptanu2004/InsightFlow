@@ -21,6 +21,8 @@ def _sample_context() -> PlannerContext:
         signals=[signal],
         supported_component_types=[ComponentType.KPI, ComponentType.BAR_CHART],
         groupable_metrics=["revenue"],
+        # region is an available dimension but deliberately NOT joinable to revenue here.
+        groupable_dimensions={"revenue": ["category"]},
         resolvable_metrics=["revenue", "aov"],
     )
 
@@ -74,9 +76,37 @@ def test_prompt_restricts_grouping_components_to_groupable_metrics_only(make_fak
     planner.plan(_sample_context())
     prompt = client.last_prompt
 
-    groupable_line = next(line for line in prompt.splitlines() if line.startswith("Metrics usable in a bar_chart"))
-    assert "revenue" in groupable_line
-    assert "aov" not in groupable_line
+    lines = prompt.splitlines()
+    assert "- revenue: category" in lines
+    assert not any(line.startswith("- aov:") for line in lines)
+
+
+def test_prompt_pairs_each_groupable_metric_only_with_dimensions_it_can_join_to(make_fake_llm_client):
+    """Phase 8 M4: listing groupable metrics and dimensions as two independent lists let the planner
+    pair any of them, but the engine can only join over a single-hop relationship. On the real Olist
+    upload revenue and category are two hops apart, and one such component fails the whole
+    dashboard -- so the prompt must offer pairs, not a cross product."""
+    client = make_fake_llm_client(_fixed_spec())
+    planner = DashboardPlanner(client, min_components=3, max_components=8)
+
+    planner.plan(_sample_context())
+    prompt = client.last_prompt
+
+    revenue_line = next(line for line in prompt.splitlines() if line.startswith("- revenue:"))
+    assert "category" in revenue_line and "region" not in revenue_line
+    assert "dimensions listed for THAT metric" in prompt
+
+
+def test_prompt_says_kpis_only_when_no_grouping_is_possible(make_fake_llm_client):
+    client = make_fake_llm_client(_fixed_spec())
+    planner = DashboardPlanner(client, min_components=3, max_components=8)
+    context = _sample_context()
+    context.groupable_metrics = []
+    context.groupable_dimensions = {}
+
+    planner.plan(context)
+
+    assert "use only kpi components" in client.last_prompt
 
 
 def test_prompt_never_offers_a_growth_metric_as_a_usable_metric_name(make_fake_llm_client):

@@ -97,3 +97,29 @@ def test_validator_names_a_component_whose_metric_the_dataset_cannot_compute(sem
     assert not result.is_valid
     error = next(e for e in result.errors if e.code == "unresolvable_metric")
     assert error.component_id == "kpi_revenue"
+
+
+def test_planner_is_only_offered_dimensions_each_metric_can_be_joined_to(semantic_model, registry, make_fake_llm_client):
+    # Without orders -> products, revenue (on orders) can't reach category (on products).
+    semantic_model.relationships = [r for r in semantic_model.relationships if "products" not in r.to_field]
+    pipeline = _pipeline(semantic_model, registry, make_fake_llm_client(None))
+
+    context = pipeline._build_planner_context(signals=[])
+
+    assert "region" in context.groupable_dimensions["revenue"]  # orders -> customers still joins
+    assert "category" not in context.groupable_dimensions["revenue"]
+
+
+def test_validator_rejects_a_grouping_with_no_join_path(semantic_model, registry):
+    semantic_model.relationships = [r for r in semantic_model.relationships if "products" not in r.to_field]
+    validator = DashboardValidator(registry, FieldResolver(semantic_model), min_components=1, max_components=8)
+    spec = DashboardSpec(
+        title="t",
+        components=[
+            ComponentSpec(component_id="bar_category", type=ComponentType.BAR_CHART, metric_name="revenue", dimension="category")
+        ],
+    )
+
+    result = validator.validate(spec)
+
+    assert [(e.code, e.component_id) for e in result.errors] == [("no_join_path", "bar_category")]

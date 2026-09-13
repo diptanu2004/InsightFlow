@@ -137,9 +137,10 @@ def test_planner_context_never_offers_a_ratio_metric_as_groupable(
     pipeline.run()
 
     client = pipeline.planner.llm_client
-    groupable_line = next(line for line in client.last_prompt.splitlines() if line.startswith("Metrics usable in a bar_chart"))
-    assert "aov" not in groupable_line
-    assert "revenue" in groupable_line
+    # Groupable metrics are listed one per line with their joinable dimensions ("- revenue: ...").
+    grouping_lines = [line for line in client.last_prompt.splitlines() if line.startswith("- ") and ": " in line]
+    assert any(line.startswith("- revenue: ") for line in grouping_lines)
+    assert not any(line.startswith("- aov: ") for line in grouping_lines)
 
 
 def test_planner_context_never_offers_a_growth_metric_as_a_usable_metric_name(

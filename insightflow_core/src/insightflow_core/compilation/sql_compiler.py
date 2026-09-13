@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from insightflow_core.compilation.field_resolver import FieldResolver
+from insightflow_core.compilation.measure_binding import bind_metric
 from insightflow_core.models import (
     AnalyticalQuery,
     CompiledQuery,
@@ -11,6 +12,7 @@ from insightflow_core.models import (
     SortSpec,
     TimeFilter,
 )
+from insightflow_core.models.query import HavingClause
 from insightflow_core.models.registry import AggregationType
 from insightflow_core.registry import MetricRegistry
 
@@ -89,19 +91,26 @@ class SQLCompiler:
         resolved = self.registry.resolve(query.metric)
         params: dict = {}
 
+        # Every measure is bound to a concrete entity for THIS dataset once, up front, and the
+        # pinned copies are what the _compile_* methods below receive -- so their `measure.entity`
+        # reads always see a real entity name, never the registry's optional pin or None.
+        having = query.having_override or getattr(resolved, "having", None)
+        bound = bind_metric(
+            resolved, self.registry, self.field_resolver.semantic_model, having_field=having.field if having else None
+        ).measures
+
         if isinstance(resolved, Measure):
-            sql = self._compile_base(resolved, query, params)
+            sql = self._compile_base(bound["base"], query, params)
         else:
             metric = resolved
             if metric.kind == MetricKind.BASE:
-                measure = self.registry.resolve(metric.base_measure)
-                sql = self._compile_base(measure, query, params)
+                sql = self._compile_base(bound["base"], query, params)
             elif metric.kind == MetricKind.RATIO:
-                sql = self._compile_ratio(metric, query, params)
+                sql = self._compile_ratio(bound["numerator"], bound["denominator"], query, params)
             elif metric.kind == MetricKind.GROWTH:
-                sql = self._compile_growth(metric, query, params)
+                sql = self._compile_growth(bound["base"], query, params)
             elif metric.kind == MetricKind.HAVING_RATIO:
-                sql = self._compile_having_ratio(metric, query, params)
+                sql = self._compile_having_ratio(metric, having, bound["threshold"], bound["denominator"], params)
             else:
                 raise ValueError(f"unhandled MetricKind: {metric.kind}")
 
@@ -185,9 +194,7 @@ class SQLCompiler:
             f'FROM deduped GROUP BY deduped."{dimension}"'
         )
 
-    def _compile_ratio(self, metric: MetricDefinition, query: AnalyticalQuery, params: dict) -> str:
-        numerator = self.registry.resolve(metric.numerator_measure)
-        denominator = self.registry.resolve(metric.denominator_measure)
+    def _compile_ratio(self, numerator: Measure, denominator: Measure, query: AnalyticalQuery, params: dict) -> str:
         _, num_agg = self._measure_sql(numerator)
         _, den_agg = self._measure_sql(denominator)
 
@@ -220,11 +227,10 @@ class SQLCompiler:
         den_sql = f'(SELECT {den_agg} FROM "{denominator.entity}"' + (f" WHERE {den_where})" if den_where else ")")
         return f"SELECT CAST({num_sql} AS DOUBLE) / NULLIF({den_sql}, 0) AS value"
 
-    def _compile_growth(self, metric: MetricDefinition, query: AnalyticalQuery, params: dict) -> str:
+    def _compile_growth(self, measure: Measure, query: AnalyticalQuery, params: dict) -> str:
         if query.growth is None:
             raise ValueError("GROWTH compilation requires query.growth (AnalyticalQuery already enforces this)")
 
-        measure = self.registry.resolve(metric.base_measure)
         _, agg_sql = self._measure_sql(measure)
         entity = measure.entity
 
@@ -240,15 +246,19 @@ class SQLCompiler:
         )
         return sql
 
-    def _compile_having_ratio(self, metric: MetricDefinition, query: AnalyticalQuery, params: dict) -> str:
-        having = query.having_override or metric.having
+    def _compile_having_ratio(
+        self,
+        metric: MetricDefinition,
+        having: HavingClause | None,
+        threshold_measure: Measure,
+        denominator: Measure,
+        params: dict,
+    ) -> str:
         if having is None:
             raise ValueError(f'metric "{metric.name}" is HAVING_RATIO but has no having clause (registry or override)')
         if not metric.group_by_field:
             raise ValueError(f'metric "{metric.name}" is HAVING_RATIO but has no group_by_field')
 
-        threshold_measure = self.registry.resolve(having.field)
-        denominator = self.registry.resolve(metric.denominator_measure)
         entity = threshold_measure.entity
         if denominator.entity != entity:
             raise ValueError("HAVING_RATIO numerator/denominator measures must share one entity in POC2")
