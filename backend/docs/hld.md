@@ -1,13 +1,11 @@
 # Phase 5 Backend — High-Level Design
 
-> **Status:** Implemented, not yet closed. All 4 package renames landed and every POC's own test
-> suite (plus `insightflow_core`'s) re-verified green standalone; this package's own test suite,
-> including a real end-to-end run (`/schema/discover` -> `/analytics/query` ->
-> `/dashboard/generate` -> `/chat/ask`) against real sample data and real Groq calls, passes.
-> **Not yet verified: the Docker build.** `backend/Dockerfile` was written per-plan but no Docker
-> install was available in the environment it was built in — `docker build -f backend/Dockerfile
-> -t insightflow-backend .` from the repo root, plus a `/health` check against the resulting
-> container, is the one remaining step before this can be marked closed.
+> **Status:** Closed. All 4 package renames landed and every POC's own test suite (plus
+> `insightflow_core`'s) re-verified green standalone; this package's own test suite, including a
+> real end-to-end run (`/schema/discover` -> `/analytics/query` -> `/dashboard/generate` ->
+> `/chat/ask`) against real sample data and real Groq calls, passes. `docker build -f
+> backend/Dockerfile -t insightflow-backend .` from the repo root builds cleanly and the resulting
+> container serves `/health` (200) and `/docs` (200) correctly.
 
 ## Scope
 

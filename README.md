@@ -17,7 +17,7 @@ InsightFlow/
 ├── poc3_dashboard_generation/ # Phase 3 — dashboard spec generation (implemented, first pass)
 ├── poc4_nl_chatbot/           # Phase 4 — natural language analytics chatbot (closed)
 ├── backend/                   # Phase 5 — one FastAPI app wiring POC 1/3/4 + insightflow_core
-│                               #   behind HTTP routes (implemented, not yet closed)
+│                               #   behind HTTP routes (closed)
 └── README.md                  # you are here
 ```
 
@@ -46,6 +46,6 @@ architecture doc describes (`app/services/schema`, `app/services/analytics`,
 | 2 — Analytics Engine | `poc2_analytics_engine/` | Closed — verified end-to-end against a sample dataset and the real, full-scale (~99.4k order) Olist dataset; see its own README's "POC 2 status: closed" |
 | 3 — Dashboard Generation | `poc3_dashboard_generation/` | Implemented, first pass — not yet closed (no real Groq run of the planner in this environment, no multi-dataset evaluation benchmark yet); see its own README's "POC 3 status" |
 | 4 — Natural Language Analytics Chatbot | `poc4_nl_chatbot/` | Closed — M1-M4 all done; 69 tests passing plus a real-Groq M4 evaluation run (16/16 refusal, 8/8 intent, 8/8 plan, 4/4 numeric accuracy, 0 hallucinations); found and fixed 3 real bugs in the shared `insightflow_core` engine and 1 real planner-prompt bug along the way; see its own `docs/hld.md`/`docs/class_diagram.md`/`docs/m4_evaluation_results.md` |
-| 5 — FastAPI Integration | `backend/` | Implemented, not yet closed — POC 1/2/3/4 packages renamed to resolve a top-level import collision, all 4 POCs' + `insightflow_core`'s test suites re-verified green standalone, and a full real-data/real-Groq end-to-end run (`/schema/discover` → `/analytics/query` → `/dashboard/generate` → `/chat/ask`) passes; the Docker build (`backend/Dockerfile`) is written but not yet verified (no Docker available in the environment it was built in); see its own `docs/hld.md`/`docs/class_diagram.md` |
+| 5 — FastAPI Integration | `backend/` | Closed — POC 1/2/3/4 packages renamed to resolve a top-level import collision, all 4 POCs' + `insightflow_core`'s test suites re-verified green standalone, a full real-data/real-Groq end-to-end run (`/schema/discover` → `/analytics/query` → `/dashboard/generate` → `/chat/ask`) passes, and `docker build -f backend/Dockerfile -t insightflow-backend .` builds cleanly with the resulting container serving `/health`/`/docs`; see its own `docs/hld.md`/`docs/class_diagram.md` |
 
 See each POC's own `README.md` for setup and run instructions.
