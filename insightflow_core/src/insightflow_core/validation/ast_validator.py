@@ -4,6 +4,7 @@ from insightflow_core.models.query import HavingClause
 from insightflow_core.models.registry import MetricKind
 from insightflow_core.models.semantic_model import SemanticModel
 from insightflow_core.registry import MetricRegistry
+from insightflow_core.validation.metric_resolvability import unresolvable_reason
 
 # Sanity bound against absurd ranges (e.g. a typo'd year). TimeFilter's own validator already
 # enforces start_date <= end_date; this is a *semantic* check on top of that structural one.
@@ -50,6 +51,12 @@ class ASTValidator:
                     field="metric",
                 )
             ]
+        # Registered isn't the same as runnable on this dataset -- see metric_resolvability.py.
+        # Without this, a metric whose measure names an entity the dataset doesn't have passed
+        # validation and crashed as an unhandled KeyError inside FieldResolver.
+        reason = unresolvable_reason(metric, self.registry, self.semantic_model)
+        if reason is not None:
+            return [ValidationError(code="unresolvable_metric", message=reason, field="metric")]
         return []
 
     def _validate_dimension(self, dimension: str) -> list[ValidationError]:

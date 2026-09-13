@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from insightflow_core.compilation import FieldResolver
 from insightflow_core.models import MetricDefinition, MetricKind, SemanticModel
 from insightflow_core.registry import MetricRegistry
+from insightflow_core.validation.metric_resolvability import resolvable_metric_names
 
 from insightflow_chatbot.models.time_expression import TimeExpression
 
@@ -51,13 +52,20 @@ def build_planner_context(semantic_model: SemanticModel, registry: MetricRegistr
             continue
         dimensions.append(name)
 
+    # Only metrics this dataset can actually compute (see insightflow_core's
+    # metric_resolvability.py). A question about anything else should come back from the planner
+    # as unanswerable -- the explicit "can't be answered from available data" refusal POC 4 exists
+    # to give -- rather than as a plan that crashes in the engine. QuestionValidator re-checks
+    # the assembled query regardless, same double-checking as the dimension filter above.
+    runnable = resolvable_metric_names(registry, semantic_model)
     metrics = [
         MetricSummary(name=name, kind="measure", description=f"raw measure on {measure.entity}")
         for name, measure in registry.measures.items()
+        if name in runnable
     ] + [
         MetricSummary(name=name, kind=metric.kind.value, description=metric.description)
         for name, metric in registry.metrics.items()
-        if isinstance(metric, MetricDefinition)
+        if isinstance(metric, MetricDefinition) and name in runnable
     ]
     groupable_metrics = [m.name for m in metrics if m.kind in ("measure", "base")]
     growth_metrics = [m.name for m in metrics if m.kind == MetricKind.GROWTH.value]

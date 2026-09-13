@@ -26,6 +26,7 @@ from insightflow_core.pipeline import AnalyticsEnginePipeline
 from insightflow_dashboard.registry import MetricRegistry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
+from insightflow_core.validation.metric_resolvability import resolvable_metric_names, unresolvable_reason
 
 
 class DashboardGenerationPipeline:
@@ -50,6 +51,20 @@ class DashboardGenerationPipeline:
     def run(self) -> HydratedDashboard:
         signals = self.signal_gatherer.gather()
         context = self._build_planner_context(signals)
+
+        # Fail before the planner's LLM call, not after it: with nothing the dataset can compute,
+        # every possible spec is invalid, so asking the planner would only spend tokens on a
+        # guaranteed rejection. Happens for real whenever the registry's measures name entities
+        # the upload doesn't have -- see insightflow_core's metric_resolvability.py.
+        if not context.resolvable_metrics:
+            reasons = sorted(
+                {
+                    reason
+                    for name in sorted(set(self.registry.measures) | set(self.registry.metrics))
+                    if (reason := unresolvable_reason(name, self.registry, self.semantic_model)) is not None
+                }
+            )
+            raise ValueError(f"no registered metric can be computed from this dataset: {'; '.join(reasons)}")
 
         spec = self.planner.plan(context)
 
@@ -77,13 +92,18 @@ class DashboardGenerationPipeline:
             except (KeyError, ValueError):
                 continue
             dimensions.append(name)
+        # Same "only offer what the validator would accept" principle as the dimension filter
+        # above, applied to metrics: a registered metric that can't resolve against THIS dataset's
+        # semantic model is never shown to the planner. DashboardValidator re-checks it anyway.
+        runnable = resolvable_metric_names(self.registry, self.semantic_model)
         metrics = [
             MetricSummary(name=name, kind="measure", description=f"raw measure on {measure.entity}")
             for name, measure in self.registry.measures.items()
+            if name in runnable
         ] + [
             MetricSummary(name=name, kind=metric.kind.value, description=metric.description)
             for name, metric in self.registry.metrics.items()
-            if isinstance(metric, MetricDefinition)
+            if isinstance(metric, MetricDefinition) and name in runnable
         ]
         # Found via the real Groq/real-Olist run (examples/real_olist_integration/README.md's
         # second "real bug found" entry): DashboardValidator._validate_group_by_supported_for_metric

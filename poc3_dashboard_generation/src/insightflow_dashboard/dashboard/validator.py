@@ -10,6 +10,7 @@ from insightflow_dashboard.dashboard.spec import GROUPING_COMPONENT_TYPES, Compo
 from insightflow_dashboard.dashboard.validation_types import DashboardValidationError, DashboardValidationResult
 from insightflow_core.compilation.field_resolver import FieldResolver
 from insightflow_core.models.registry import MetricKind
+from insightflow_core.validation.metric_resolvability import unresolvable_reason
 from insightflow_dashboard.registry import MetricRegistry
 
 # v1 only resolves these component types (docs/hld.md's "In scope" section, docs/class_diagram.md's
@@ -53,9 +54,22 @@ class DashboardValidator:
         # error (or an AttributeError from registry.resolve on an unknown name) piled onto an
         # already-reported unknown_metric.
         if not any(e.code == "unknown_metric" and e.component_id == component.component_id for e in errors):
+            errors += self._validate_metric_resolves_on_dataset(component)
             errors += self._validate_metric_directly_resolvable(component)
             errors += self._validate_group_by_supported_for_metric(component)
         return errors
+
+    def _validate_metric_resolves_on_dataset(self, component: ComponentSpec) -> list[DashboardValidationError]:
+        # The pipeline already withholds unresolvable metrics from the planner; this re-checks the
+        # spec it got back, same double-checking as every other planner-context filter here. A
+        # hallucinated-but-registered metric the dataset can't compute must be rejected with the
+        # component named, not crash inside the engine's FieldResolver.
+        reason = unresolvable_reason(component.metric_name, self.registry, self.field_resolver.semantic_model)
+        if reason is None:
+            return []
+        return [
+            DashboardValidationError(code="unresolvable_metric", message=reason, component_id=component.component_id)
+        ]
 
     def _validate_metric_directly_resolvable(self, component: ComponentSpec) -> list[DashboardValidationError]:
         # Real bug found via the real Groq/real-Olist run: DashboardDataResolver.build_query()

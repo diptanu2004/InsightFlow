@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from insightflow_chatbot.models.result import Answer
@@ -35,7 +35,14 @@ def ask(
     if cached is not None:
         return Answer.model_validate_json(cached)
 
-    chat_pipeline = cache.get_or_build_chat(dataset)
+    try:
+        # Building the pipeline can fail on the dataset itself, before any question is asked:
+        # POC 4 infers its date bounds from a configured time entity, which a real upload whose
+        # entities are named after its own files may not have. That's a property of the data,
+        # not a server fault -- report it instead of letting it escape as a raw 500.
+        chat_pipeline = cache.get_or_build_chat(dataset)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"this dataset can't be queried in chat: {e}")
     result = chat_pipeline.answer(body.question)  # never raises for refusals -- Answer.refused carries that
     result_cache.set(cache_key, result.model_dump_json())
     return result
