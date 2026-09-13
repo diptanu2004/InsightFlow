@@ -1,38 +1,15 @@
-"""Router-level auth tests use a real Postgres-backed FastAPI TestClient -- the app's own
-`get_db` dependency is overridden to hand out a session bound to a per-test transaction (rolled
-back afterward), same isolation strategy as tests/db/conftest.py, just wired through FastAPI's
-dependency_overrides instead of used directly.
+"""Router-level tests use a real Postgres-backed FastAPI TestClient -- see tests/infra.py's
+`real_db_client` for the shared DB-transaction-per-test isolation strategy.
 """
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import sessionmaker
 
-from insightflow_backend.db.session import get_db
-from insightflow_backend.main import create_app
 from tests.db.conftest import db_engine, requires_postgres  # noqa: F401 -- reused fixture
+from tests.infra import real_db_client, requires_infra  # noqa: F401 -- reused by dataset-upload tests
 
-__all__ = ["requires_postgres"]
+__all__ = ["requires_postgres", "requires_infra"]
 
 
 @pytest.fixture
 def client(db_engine):  # noqa: F811 -- fixture name shadows the imported one on purpose
-    connection = db_engine.connect()
-    transaction = connection.begin()
-    SessionLocal = sessionmaker(bind=connection)
-
-    def _override_get_db():
-        session = SessionLocal()
-        try:
-            yield session
-        finally:
-            session.close()
-
-    app = create_app()
-    app.dependency_overrides[get_db] = _override_get_db
-
-    with TestClient(app) as test_client:
+    with real_db_client(db_engine) as test_client:
         yield test_client
-
-    if transaction.is_active:
-        transaction.rollback()
-    connection.close()

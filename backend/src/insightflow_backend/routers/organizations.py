@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, ConfigDict
 from sqlalchemy.orm import Session
 
+from insightflow_backend import audit
 from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.auth.rbac import get_membership, require_org_role
 from insightflow_backend.db.models import Membership, Organization, Role, User
@@ -70,6 +71,7 @@ def create_organization(
     # The creator is always the org's first Owner -- there's no other way to bootstrap
     # membership, since every other route requires an existing membership to act at all.
     db.add(Membership(user_id=user.id, org_id=org.id, role=Role.OWNER))
+    audit.record(db, org_id=org.id, user_id=user.id, action="organization.created", resource_type="organization", resource_id=org.id)
     db.commit()
     db.refresh(org)
     return OrganizationOut(id=org.id, name=org.name, slug=org.slug, created_at=org.created_at, my_role=Role.OWNER)
@@ -120,6 +122,15 @@ def add_member(
 
     new_membership = Membership(user_id=target_user.id, org_id=membership.org_id, role=body.role)
     db.add(new_membership)
+    audit.record(
+        db,
+        org_id=membership.org_id,
+        user_id=membership.user_id,
+        action="member.added",
+        resource_type="user",
+        resource_id=target_user.id,
+        detail=f"role={body.role.value}",
+    )
     db.commit()
     return MemberOut(user_id=target_user.id, email=target_user.email, role=body.role)
 
@@ -145,7 +156,17 @@ def change_member_role(
     if target.role == Role.OWNER and body.role != Role.OWNER and _count_owners(db, membership.org_id) == 1:
         raise HTTPException(status_code=409, detail="cannot demote the organization's last Owner")
 
+    old_role = target.role
     target.role = body.role
+    audit.record(
+        db,
+        org_id=membership.org_id,
+        user_id=membership.user_id,
+        action="member.role_changed",
+        resource_type="user",
+        resource_id=target.user_id,
+        detail=f"{old_role.value} -> {body.role.value}",
+    )
     db.commit()
     return MemberOut(user_id=target.user_id, email=target.user.email, role=target.role)
 
@@ -167,4 +188,12 @@ def remove_member(
         raise HTTPException(status_code=409, detail="cannot remove the organization's last Owner")
 
     db.delete(target)
+    audit.record(
+        db,
+        org_id=membership.org_id,
+        user_id=membership.user_id,
+        action="member.removed",
+        resource_type="user",
+        resource_id=user_id,
+    )
     db.commit()

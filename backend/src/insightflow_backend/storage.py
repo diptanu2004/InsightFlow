@@ -32,6 +32,13 @@ class ObjectStorage(Protocol):
         it first if not already present locally."""
         ...
 
+    def download_to(self, key: str, local_path: Path) -> Path:
+        """Like `download_to_local`, but the caller picks the exact destination path instead of
+        an opaque cache-derived one -- used by pipeline_cache.py, which needs a dataset's CSVs
+        to land under specific filenames (`{source_file}.csv`) that insightflow_core's
+        QueryExecutor expects, not this class's own hashed cache naming."""
+        ...
+
     def exists(self, key: str) -> bool: ...
 
 
@@ -74,7 +81,10 @@ class S3ObjectStorage:
         # (org_id/project_id/dataset_id/filename), which would otherwise silently create nested
         # directories that collide with the flat cache layout this is meant to be.
         cache_name = hashlib.sha256(key.encode()).hexdigest() + "_" + Path(key).name
-        local_path = self._local_cache_dir / cache_name
+        return self.download_to(key, self._local_cache_dir / cache_name)
+
+    def download_to(self, key: str, local_path: Path) -> Path:
+        local_path.parent.mkdir(parents=True, exist_ok=True)
         if not local_path.exists():
             self._client.download_file(self._bucket, key, str(local_path))
         return local_path

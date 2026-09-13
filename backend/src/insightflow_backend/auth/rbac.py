@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.db.models import Membership, Project, Role, User
 from insightflow_backend.db.session import get_db
+from insightflow_backend.logging_context import set_org_id
 
 _ROLE_RANK = {Role.VIEWER: 0, Role.ANALYST: 1, Role.ADMIN: 2, Role.OWNER: 3}
 
@@ -35,6 +36,7 @@ def require_org_role(min_role: Role):
         membership = get_membership(db, user.id, org_id)
         if membership is None or _ROLE_RANK[membership.role] < _ROLE_RANK[min_role]:
             raise HTTPException(status_code=403, detail="insufficient role for this organization")
+        set_org_id(org_id)
         return membership
 
     return dependency
@@ -58,6 +60,7 @@ def require_project_role(min_role: Role):
         membership = get_membership(db, user.id, project.org_id)
         if membership is None or _ROLE_RANK[membership.role] < _ROLE_RANK[min_role]:
             raise HTTPException(status_code=403, detail="insufficient role for this project")
+        set_org_id(project.org_id)
         return project
 
     return dependency

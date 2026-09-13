@@ -12,7 +12,7 @@ __pycache__/
 **/tests/
 *.duckdb
 .pytest_cache/
-backend/.uploads/
+backend/.dataset_cache/
 
 # Each POC's real-Olist example data is multi-MB and never COPY'd into an image anyway (only
 # each POC's own small data/ sample is) — excluded from the build context entirely so it isn't

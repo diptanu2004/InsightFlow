@@ -1,26 +1,14 @@
 """Real MinIO, not a mock -- same "verify against the real thing" discipline as tests/db.
-Requires `docker compose up -d minio minio-init` running locally; skipped otherwise.
+Requires `docker compose up -d minio minio-init` running locally; skipped otherwise. See
+tests/infra.py for the availability check, shared with the other real-infra test modules.
 """
 import uuid
 
 import pytest
-from botocore.exceptions import EndpointConnectionError
 
 from insightflow_backend.config import settings
 from insightflow_backend.storage import build_storage
-
-
-def _minio_available() -> bool:
-    try:
-        build_storage().exists("__connectivity_probe__")
-        return True
-    except EndpointConnectionError:
-        return False
-
-
-requires_minio = pytest.mark.skipif(
-    not _minio_available(), reason="requires `docker compose up -d minio minio-init` running locally"
-)
+from tests.infra import requires_minio
 
 
 @pytest.fixture

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from insightflow_backend.auth.jwt import TokenError, decode_access_token
 from insightflow_backend.db.models import User
 from insightflow_backend.db.session import get_db
+from insightflow_backend.logging_context import set_user_id
 
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
@@ -27,4 +28,5 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="user not found or inactive")
+    set_user_id(user.id)
     return user

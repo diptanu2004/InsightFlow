@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from insightflow_backend.auth.jwt import create_access_token, generate_refresh_token, hash_refresh_token
 from insightflow_backend.auth.passwords import MAX_PASSWORD_BYTES, hash_password, verify_password
+from insightflow_backend.auth.rate_limit import rate_limit_auth
 from insightflow_backend.db.models import RefreshToken, User
 from insightflow_backend.db.session import get_db
 
@@ -53,7 +54,7 @@ def _issue_token_pair(db: Session, user: User) -> TokenPair:
     return TokenPair(access_token=access_token, refresh_token=raw_refresh)
 
 
-@router.post("/register", response_model=TokenPair, status_code=201)
+@router.post("/register", response_model=TokenPair, status_code=201, dependencies=[Depends(rate_limit_auth)])
 def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenPair:
     # No email-verification flow yet (deliberately out of scope for Phase 6 -- see CLAUDE.md /
     # the Phase 6 plan doc), so registering issues real tokens immediately, same as login.
@@ -67,7 +68,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenPair:
     return _issue_token_pair(db, user)
 
 
-@router.post("/login", response_model=TokenPair)
+@router.post("/login", response_model=TokenPair, dependencies=[Depends(rate_limit_auth)])
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenPair:
     user = db.query(User).filter(User.email == body.email).first()
     if user is None or not user.is_active or not verify_password(body.password, user.hashed_password):

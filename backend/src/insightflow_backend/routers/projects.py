@@ -10,8 +10,10 @@ from fastapi import APIRouter, Depends, Path
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from insightflow_backend import audit
+from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.auth.rbac import require_org_role, require_project_role
-from insightflow_backend.db.models import Membership, Project, Role
+from insightflow_backend.db.models import Membership, Project, Role, User
 from insightflow_backend.db.session import get_db
 
 router = APIRouter()
@@ -37,6 +39,15 @@ def create_project(
 ) -> ProjectOut:
     project = Project(org_id=membership.org_id, name=body.name)
     db.add(project)
+    db.flush()
+    audit.record(
+        db,
+        org_id=membership.org_id,
+        user_id=membership.user_id,
+        action="project.created",
+        resource_type="project",
+        resource_id=project.id,
+    )
     db.commit()
     db.refresh(project)
     return ProjectOut.model_validate(project)
@@ -57,7 +68,12 @@ def get_project(project: Project = Depends(require_project_role(Role.VIEWER))) -
 
 @router.delete("/projects/{project_id}", status_code=204, tags=["projects"])
 def delete_project(
-    project: Project = Depends(require_project_role(Role.ADMIN)), db: Session = Depends(get_db)
+    project: Project = Depends(require_project_role(Role.ADMIN)),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> None:
+    audit.record(
+        db, org_id=project.org_id, user_id=user.id, action="project.deleted", resource_type="project", resource_id=project.id
+    )
     db.delete(project)
     db.commit()

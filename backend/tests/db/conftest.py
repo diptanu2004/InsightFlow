@@ -4,38 +4,24 @@ same "verify against the real thing" discipline as every POC's own integration t
 identically on sqlite, so a passing sqlite test would prove less than nothing.
 
 Requires `docker compose up -d postgres` to be running locally; skipped otherwise so the rest of
-the suite (which doesn't need Postgres) still runs without Docker.
+the suite (which doesn't need Postgres) still runs without Docker. See tests/infra.py for the
+availability check, shared with the other real-infra test modules.
 """
-import os
-
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from insightflow_backend.config import settings
 from insightflow_backend.db.base import Base
 from insightflow_backend.db import models  # noqa: F401 -- registers tables on Base.metadata
+from tests.infra import requires_postgres  # noqa: F401 -- re-exported for existing importers
 
-TEST_DATABASE_URL = os.getenv(
-    "TEST_DATABASE_URL", "postgresql+psycopg://insightflow:insightflow@localhost:5432/insightflow"
-)
-
-
-def _postgres_available() -> bool:
-    try:
-        create_engine(TEST_DATABASE_URL).connect().close()
-        return True
-    except Exception:
-        return False
-
-
-requires_postgres = pytest.mark.skipif(
-    not _postgres_available(), reason="requires `docker compose up -d postgres` running locally"
-)
+__all__ = ["requires_postgres", "db_engine", "db_session"]
 
 
 @pytest.fixture(scope="module")
 def db_engine():
-    engine = create_engine(TEST_DATABASE_URL)
+    engine = create_engine(settings.database_url)
     Base.metadata.create_all(engine)
     yield engine
     Base.metadata.drop_all(engine)
