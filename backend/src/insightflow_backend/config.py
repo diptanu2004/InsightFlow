@@ -36,5 +36,30 @@ class Settings:
     # assuming the process is run from inside backend/ (e.g. `cd backend && uv run uvicorn ...`).
     upload_root: Path = Path(os.getenv("UPLOAD_ROOT", ".uploads"))
 
+    # -- Phase 6: Postgres (app/tenant metadata -- users, orgs, projects, datasets) --
+    # No default in prod: a missing DATABASE_URL should fail loudly at startup, not silently
+    # fall back to something a developer forgot to point at a real database.
+    database_url: str = os.getenv(
+        "DATABASE_URL", "postgresql+psycopg://insightflow:insightflow@localhost:5432/insightflow"
+    )
+
+    # -- Phase 6: JWT auth --
+    jwt_secret: str = os.getenv("JWT_SECRET", "")
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_ttl_minutes: int = int(os.getenv("JWT_ACCESS_TOKEN_TTL_MINUTES", "15"))
+    jwt_refresh_token_ttl_days: int = int(os.getenv("JWT_REFRESH_TOKEN_TTL_DAYS", "30"))
+
+    # -- Phase 6: object storage for uploaded datasets (S3-compatible; MinIO locally, S3 in prod) --
+    # No local-disk backend: dev/test run against MinIO too, so the storage code path is
+    # identical in every environment and only the endpoint URL differs (see docker-compose.yml).
+    s3_endpoint_url: str = os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")
+    s3_bucket: str = os.getenv("S3_BUCKET", "insightflow-datasets")
+    aws_access_key_id: str = os.getenv("AWS_ACCESS_KEY_ID", "insightflow")
+    aws_secret_access_key: str = os.getenv("AWS_SECRET_ACCESS_KEY", "insightflow123")
+    aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+    # Per-process local cache for objects downloaded from S3 -- POC pipelines (DuckDB/pandas)
+    # read local file paths, not S3 URIs. See storage.py.
+    dataset_cache_dir: Path = Path(os.getenv("DATASET_CACHE_DIR", ".dataset_cache"))
+
 
 settings = Settings()

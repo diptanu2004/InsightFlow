@@ -21,3 +21,6 @@ poc2_analytics_engine/examples/real_olist_full_scale/data/raw/
 
 # Phase 5 backend: per-upload dataset dirs written at runtime by POST /schema/discover
 backend/.uploads/
+
+# Phase 6 backend: local cache of objects downloaded from S3/MinIO (see storage.py)
+backend/.dataset_cache/

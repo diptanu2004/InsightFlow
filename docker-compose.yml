@@ -1,0 +1,77 @@
+# Local dev stack for Phase 6 (auth + multi-tenancy). Not used in production -- prod points at
+# a managed Postgres (Neon/Supabase) and a real S3 bucket via env vars in backend/.env; this
+# compose file exists so the same STORAGE_BACKEND=s3 code path and the same Postgres wire
+# protocol are exercised locally, per Phase 6 plan's "no local-disk backend kept for prod" choice.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: insightflow
+      POSTGRES_PASSWORD: insightflow
+      POSTGRES_DB: insightflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - insightflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U insightflow"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    # minio/minio on Docker Hub was retired; quay.io is MinIO's current registry.
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: insightflow
+      MINIO_ROOT_PASSWORD: insightflow123
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - insightflow-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # One-shot init container: creates the dev bucket so the backend doesn't need bucket-creation
+  # logic of its own (a prod S3 bucket is provisioned out-of-band, not by the app).
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 insightflow insightflow123 &&
+      mc mb -p local/insightflow-datasets
+      "
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://insightflow:insightflow@postgres:5432/insightflow
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_BUCKET: insightflow-datasets
+      AWS_ACCESS_KEY_ID: insightflow
+      AWS_SECRET_ACCESS_KEY: insightflow123
+      JWT_SECRET: dev-only-secret-do-not-use-in-prod
+    ports:
+      - "8000:8000"
+    env_file:
+      - backend/.env
+
+volumes:
+  insightflow-postgres-data:
+  insightflow-minio-data:

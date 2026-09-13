@@ -13,6 +13,14 @@ dependencies = [
     "insightflow-schema-discovery",
     "insightflow-dashboard",
     "insightflow-chatbot",
+    # -- Phase 6: auth + multi-tenancy --
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+    "bcrypt>=4.1",
+    "pyjwt>=2.9",
+    "boto3>=1.35",
+    "pydantic[email]>=2.7",
 ]
 
 [tool.uv.sources]
