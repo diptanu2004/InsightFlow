@@ -537,9 +537,14 @@ routes to existing pipelines" instead of a rewrite.
   any test exercising the async discovery job path; found the hard way in Phase 7 M3 when a `Job`
   row created inside a rolled-back transaction was invisible to the worker, which silently no-op'd
   instead of erroring.
-- The backend test suite runs against a **separate** database (`<dev db>_test` by default,
-  auto-created), redirected by `backend/conftest.py` — don't remove that redirection or point
-  tests back at `DATABASE_URL`. `db_engine` calls `create_all()`/`drop_all()`, so sharing the dev
+- The backend test suite runs against a **separate Postgres database** (`<dev db>_test`,
+  auto-created) **and a separate Redis logical db** (15), both redirected by `backend/conftest.py`
+  — don't remove either redirection, and it refuses to start if an override points back at dev.
+  Isolating Postgres alone was worse than nothing (found in Phase 8 M3): a locally running dev
+  worker shared the RQ queue but not the database, so it dequeued test jobs, couldn't find their
+  `Job` rows, returned early — which RQ logs as a *successful* "Job OK" in milliseconds — and the
+  tests' own worker drained an empty queue, leaving jobs at `pending`. Shared Redis also meant
+  `reset_rate_limits()` wiped the dev server's live rate-limit buckets on every test run. `db_engine` calls `create_all()`/`drop_all()`, so sharing the dev
   database destroyed dev data on every run, and since `alembic_version` isn't in `Base.metadata`
   it survived `drop_all()` still claiming head — leaving `alembic current` insisting the schema
   was applied while every request failed with `relation "users" does not exist`. That's the real
