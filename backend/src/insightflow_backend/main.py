@@ -4,7 +4,8 @@ import time
 from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 
-from insightflow_backend.auth.rate_limit import build_auth_rate_limiter
+from insightflow_backend.auth.rate_limit import build_auth_rate_limiter, build_llm_rate_limiter, build_redis_client
+from insightflow_backend.cache import build_result_cache
 from insightflow_backend.config import settings
 from insightflow_backend.logging_config import configure_logging
 from insightflow_backend.logging_context import get_org_id, get_user_id, new_request_id
@@ -41,10 +42,16 @@ def create_app() -> FastAPI:
     storage = build_storage()
     app.state.storage = storage
     app.state.pipeline_cache = PipelineCache(storage=storage)
-    # Per-app instance, not a module global -- see auth/rate_limit.py's docstring for why (module
-    # globals would let every FastAPI app instance in the same process, including every
-    # independent test's TestClient app, throttle each other's unrelated requests).
-    app.state.auth_rate_limiter = build_auth_rate_limiter()
+    # One Redis client for the whole process, shared by both rate-limit buckets, the result
+    # cache, and the job queue in a later Phase 7 milestone. Held on app.state, not a module
+    # global -- see auth/rate_limit.py's docstring for why (module globals would let every
+    # FastAPI app instance in the same process, including every independent test's TestClient
+    # app, throttle each other's unrelated requests).
+    redis_client = build_redis_client()
+    app.state.redis_client = redis_client
+    app.state.auth_rate_limiter = build_auth_rate_limiter(redis_client)
+    app.state.llm_rate_limiter = build_llm_rate_limiter(redis_client)
+    app.state.result_cache = build_result_cache(redis_client, ttl_seconds=settings.result_cache_ttl_seconds)
 
     # Fails closed: no frontend exists yet (Phase 8), so CORS_ALLOWED_ORIGINS is empty by
     # default and no browser origin is allowed until an operator opts in explicitly.

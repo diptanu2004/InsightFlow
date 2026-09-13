@@ -12,6 +12,7 @@ import uuid
 from fastapi import Depends, HTTPException, Path, Request
 from sqlalchemy.orm import Session
 
+from insightflow_backend.cache import ResultCache
 from insightflow_backend.db.models import Dataset
 from insightflow_backend.db.session import get_db
 from insightflow_backend.pipeline_cache import PipelineCache
@@ -20,6 +21,10 @@ from insightflow_backend.storage import ObjectStorage
 
 def get_pipeline_cache(request: Request) -> PipelineCache:
     return request.app.state.pipeline_cache
+
+
+def get_result_cache(request: Request) -> ResultCache:
+    return request.app.state.result_cache
 
 
 def get_storage(request: Request) -> ObjectStorage:

@@ -57,3 +57,40 @@ than building its own, so `SessionState.get_or_build_chat_pipeline()` reuses
   POC 2/3/4 — collapsing those three into a dependency on this package would invert the
   dependency direction (each POC would need to depend on the backend) and is out of scope.
 - No Redis/background workers (Phase 7), no frontend (Phase 8), no Power BI (Phase 9).
+
+Note: this doc predates Phase 6 (auth + multi-tenancy) and was never rewritten for it -- Phase
+6's own design decisions were deliberately captured inline in code docstrings instead of a
+second HLD pass (see CLAUDE.md §6). The "single global session" limitation above is Phase 5
+history now, superseded by Phase 6's `Dataset`/`PipelineCache` model; read this doc for the
+original routing/rename rationale, not as current-state session architecture.
+
+## Phase 7 additions (Redis + background workers + caching)
+
+Full design rationale and the milestone-by-milestone implementation log (including every real
+bug found running each piece against real infra) live in `backend/docs/phase7_scope.md` -- this
+section is just the resulting shape of the request flow, for whoever reads this HLD next.
+
+```
+POST /schema/discover        -> enqueue Job -> 202 + job id      (was: 201 + Dataset, inline)
+GET  /schema/jobs/{job_id}   -> poll Job status/result            (new)
+POST /analytics/query        -> ResultCache check -> AnalyticsEnginePipeline.run()  (on miss)
+POST /dashboard/generate     -> ResultCache check -> DashboardGenerationPipeline.run()  (on miss)
+POST /chat/ask               -> ResultCache check -> QuestionAnsweringPipeline.answer()  (on miss)
+```
+
+- **Schema discovery is async now.** The LLM-heavy relationship-reasoning work moved off the
+  request thread onto an RQ job (`jobs.py`/`worker.py`), backed by a new `jobs` table so status
+  survives a worker restart. `analytics/query` stayed synchronous on purpose -- it's
+  deterministic SQL with no LLM call, nothing to move.
+- **Every LLM-calling route is cached** (`cache.py`'s `ResultCache`, Redis-backed) keyed on
+  `(dataset_id, route, canonicalized request)`. A `Dataset` row is immutable once created, so a
+  cache hit is correct indefinitely -- the TTL is memory hygiene, not correctness.
+- **Rate limiting is Redis-backed and distributed** (`auth/rate_limit.py`'s `RedisRateLimiter`),
+  covering `/auth/*` (keyed per client IP) and the three LLM routes above (keyed per project,
+  since LLM spend is a tenant budget, not a per-client one).
+- **Known, measured limitation:** a worker process that dies from an uncaught exception (or an
+  RQ `job_timeout`) correctly marks its `Job` row `failed` with the real error -- verified against
+  a real Groq 429. A worker killed with `SIGKILL` mid-job does not: the row is left stuck at
+  `running` forever, confirmed by actually killing a real worker container mid-discovery-call
+  and observing the stuck row. No heartbeat/staleness-reconciliation mechanism exists yet to
+  reclaim it; that's explicitly deferred, not solved by this phase.

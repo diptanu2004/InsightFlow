@@ -64,20 +64,19 @@ Never set this to `*` in production if you also rely on cookies/credentials -- t
 Bearer tokens (not cookies) for auth, so a same-site restriction isn't load-bearing for session
 security, but a wildcard still needlessly widens what can call the API from a browser.
 
-## Rate limiting -- known limitation
+## Rate limiting
 
 `/auth/login` and `/auth/register` are rate-limited (`AUTH_RATE_LIMIT_MAX_REQUESTS` per
-`AUTH_RATE_LIMIT_WINDOW_SECONDS`), but the limiter is in-memory and per-process
-(`auth/rate_limit.py`). Two real consequences if you deploy more than one backend instance:
+`AUTH_RATE_LIMIT_WINDOW_SECONDS`), and as of Phase 7 M1 the limiter is Redis-backed
+(`auth/rate_limit.py`) -- a real global cap shared across every backend instance, not a
+per-process approximation. `schema/discover`, `dashboard/generate`, and `chat/ask` are also
+rate-limited (`LLM_RATE_LIMIT_MAX_REQUESTS`/`LLM_RATE_LIMIT_WINDOW_SECONDS`), keyed per-project
+rather than per-client since LLM spend is a tenant budget concern. See
+`backend/docs/phase7_scope.md` for the full M1 design.
 
-1. The effective limit is `N` × the configured value, split however a load balancer happens to
-   route requests -- not a hard global cap.
-2. A restart resets it to zero.
-
-This is a deliberate stopgap, not a bug to route around by adding more state here -- Phase 7
-(Redis + background workers, per `CLAUDE.md`'s development order) is where a real shared rate
-limiter belongs. Don't be surprised if it under- or over-blocks slightly at the margins before
-then.
+Requires `REDIS_URL` pointing at a reachable Redis (`docker compose up -d redis` locally); the app
+itself starts fine without one (the client connects lazily), but any request that hits a
+rate-limited route will fail once it actually needs Redis.
 
 ## TLS / reverse proxy
 

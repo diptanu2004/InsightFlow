@@ -21,6 +21,9 @@ dependencies = [
     "pyjwt>=2.9",
     "boto3>=1.35",
     "pydantic[email]>=2.7",
+    # -- Phase 7: distributed rate limiting, result caching, and the async schema-discovery job queue --
+    "redis>=5.0",
+    "rq>=1.16",
 ]
 
 [tool.uv.sources]

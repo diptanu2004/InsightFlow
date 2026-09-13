@@ -117,6 +117,45 @@ class Dataset(Base):
     project: Mapped["Project"] = relationship(back_populates="datasets")
 
 
+class JobStatus(str, enum.Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+
+
+class Job(Base):
+    """Async schema-discovery job (Phase 7 M3) -- POST /schema/discover enqueues this and
+    returns immediately instead of blocking on the LLM-heavy discovery pipeline; a worker
+    process (worker.py/jobs.py) picks it up, and GET .../schema/jobs/{id} polls this row.
+    Stored in Postgres, not just Redis, so status survives a worker restart and stays
+    queryable/audited like everything else in this schema -- see backend/docs/phase7_scope.md.
+
+    `dataset_id` is generated at job-creation time, before the `Dataset` row exists -- the
+    uploaded files are already written to S3 under that id's prefix by the time this job is
+    enqueued (see routers/schema.py). It's a plain UUID column rather than a foreign key: there
+    is nothing to reference until the worker creates the `Dataset` row itself on success.
+    """
+
+    __tablename__ = "jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False)
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus, name="job_status"), nullable=False, default=JobStatus.PENDING
+    )
+    dataset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    dataset_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    storage_prefix: Mapped[str] = mapped_column(String(500), nullable=False)
+    filenames: Mapped[list] = mapped_column(JSONB, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
 class RefreshToken(Base):
     """Opaque refresh tokens, stored hashed, rotated on every use. Lets a token be revoked
     (logout, credential rotation) without needing a stateless-JWT blacklist -- see auth/jwt.py.

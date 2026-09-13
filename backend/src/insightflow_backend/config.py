@@ -15,7 +15,11 @@ load_dotenv()
 class Settings:
     # -- LLM (shared GroqLLMClient across schema discovery, dashboard, chat) --
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
-    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # llama-3.3-70b-versatile (the original Phase 5/6 default) was deprecated by Groq at some
+    # point after Phase 6 shipped -- 404 model_not_found on every call. openai/gpt-oss-120b is
+    # the model POC4's own M4 evaluation verified working (CLAUDE.md), and what poc4_nl_chatbot's
+    # .env already uses.
+    groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
     # -- engine wiring, same defaults every POC has always used --
     duckdb_path: str = os.getenv("DUCKDB_PATH", ":memory:")
@@ -63,12 +67,26 @@ class Settings:
     cors_allowed_origins: list[str] = [
         o.strip() for o in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
     ]
-    # In-memory stopgap rate limit on /auth/login and /auth/register only -- per-process, not
-    # distributed, resets on restart. Real rate limiting (Redis-backed, all routes) is Phase 7;
-    # this exists only so a bare deployment isn't wide open to unlimited login/registration
-    # attempts in the meantime. See auth/rate_limit.py.
+    # Redis-backed (Phase 7 M1) -- a real global cap on /auth/login and /auth/register, shared
+    # across every backend instance. See auth/rate_limit.py.
     auth_rate_limit_max_requests: int = int(os.getenv("AUTH_RATE_LIMIT_MAX_REQUESTS", "10"))
     auth_rate_limit_window_seconds: float = float(os.getenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+    # -- Phase 7: Redis (distributed rate limiting now; result caching + the schema-discovery job
+    # queue land in later Phase 7 milestones -- see backend/docs/phase7_scope.md) --
+    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    # Keyed per-project (not per-client-IP like auth) -- LLM spend is a tenant budget concern,
+    # not a per-client abuse concern, and every user in an org shares the same project. Covers
+    # schema/discover, dashboard/generate, chat/ask -- the only routes that spend an LLM call.
+    llm_rate_limit_max_requests: int = int(os.getenv("LLM_RATE_LIMIT_MAX_REQUESTS", "30"))
+    llm_rate_limit_window_seconds: float = float(os.getenv("LLM_RATE_LIMIT_WINDOW_SECONDS", "60"))
+    # Result cache (analytics/query, dashboard/generate, chat/ask) -- long default TTL since a
+    # dataset's rows are immutable once created (a re-upload is a new Dataset row, not a mutation
+    # of this one), so the TTL is Redis memory hygiene, not a correctness knob. See cache.py.
+    result_cache_ttl_seconds: int = int(os.getenv("RESULT_CACHE_TTL_SECONDS", str(24 * 60 * 60)))
+    # -- Phase 7 M3: async schema-discovery job queue (RQ) --
+    rq_queue_name: str = os.getenv("RQ_QUEUE_NAME", "insightflow-discovery")
+    discovery_job_timeout_seconds: int = int(os.getenv("DISCOVERY_JOB_TIMEOUT_SECONDS", "600"))
 
 
 settings = Settings()

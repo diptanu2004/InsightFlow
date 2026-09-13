@@ -59,7 +59,9 @@ violates one of these, flag it before proceeding:
 - **AI:** LangChain, LLM provider abstraction, structured outputs/JSON schemas, selective RAG
 - **DB:** PostgreSQL (app metadata, semantic models, metrics, dashboards, audit) — dev/free-tier
   options: Supabase or Neon
-- **Cache/jobs:** Redis (caching, rate limiting, job coordination) + worker queue (Celery/RQ)
+- **Cache/jobs:** Redis (caching, rate limiting, job coordination) + worker queue — **RQ**, chosen
+  over Celery in Phase 7 for its lighter operational surface, fitting this project's
+  incremental-complexity philosophy better than Celery's broker/backend/beat machinery
 - **Frontend:** React, TypeScript, charting + dashboard component system (Phase 8, not yet built)
 - **BI:** Power BI as a downstream consumer of the semantic model (Phase 9, not core)
 - **Storage:** Object storage for raw CSV/Excel; Postgres for structured metadata only
@@ -98,10 +100,10 @@ Phase 10 — Security + Observability + Deployment
 Rationale: validate every hard AI/system component in isolation (headless, CLI-driven, own venv)
 before integrating. Do not build auth/Redis/React/Power BI alongside the POCs.
 
-### Current status: POC 1–4 and Phases 5–6 are all done and closed.
-Phase 7+ (Redis + background workers, frontend, Power BI, security/observability/deployment
-hardening beyond what Phase 6 already added) has not been started. Phase 7+ work should still be
-explicitly requested, not assumed — confirm with the user before starting it.
+### Current status: POC 1–4 and Phases 5–7 are all done and closed.
+Phase 8+ (React frontend, Power BI, security/observability/deployment hardening beyond what
+Phase 6/7 already added) has not been started. Phase 8+ work should still be explicitly
+requested, not assumed — confirm with the user before starting it.
 
 ---
 
@@ -361,6 +363,76 @@ serving `/health`/`/docs` against real Postgres/MinIO on the same Docker network
 rationale: `backend/docs/phase6_deployment.md` (operational/deployment side); design decisions are
 captured inline in the code docstrings referenced above rather than a separate design doc.
 
+### Phase 7 — Redis + Background Workers + Caching (done, closed)
+Closed Phase 6's two explicit stopgaps (the in-memory, per-process auth rate limiter and
+`PipelineCache`'s per-process warmth) and moved schema discovery — the one LLM-heavy, potentially
+slow route — off the request thread onto a real job queue. Built as four milestones, each
+verified against real infra (Postgres/MinIO/Redis via `docker-compose.yml`), never mocks. Full
+scope, rationale, and every real finding: `backend/docs/phase7_scope.md`.
+
+**M1 — Redis-backed, distributed rate limiting** (`auth/rate_limit.py`'s `RedisRateLimiter`):
+replaces the old `InMemoryRateLimiter`, a real global cap shared across every backend instance
+instead of a per-process approximation. Two buckets: `auth` (keyed by client IP, covers
+`/auth/login`/`/auth/register`) and `llm` (keyed by `project_id`, covers `schema/discover`,
+`dashboard/generate`, `chat/ask` — LLM spend is a tenant budget concern, not a per-client one).
+
+**M2 — Redis-backed result cache** (`cache.py`'s `ResultCache`): caches `MetricResult`/
+`HydratedDashboard`/`Answer` keyed by `(dataset_id, route, canonicalized request)`. A `Dataset`
+row is immutable once created (a re-upload is a new row, not a mutation), so a cache hit is
+correct indefinitely — the TTL is Redis memory hygiene, not a correctness mechanism. Sharing
+`PipelineCache` itself via Redis was considered and explicitly dropped: a DuckDB connection and a
+pipeline object can't cross a process boundary through Redis, so the only real cross-instance
+caching value was always in the *outputs*, not the pipeline objects producing them.
+
+**M3 — Async schema discovery via RQ** (`jobs.py`, `worker.py`, new `jobs` table): `POST
+schema/discover` now enqueues a job and returns `202` + job id immediately instead of blocking on
+`run_schema_discovery()` (unchanged); poll `GET .../schema/jobs/{job_id}` for status/result.
+`analytics/query` stayed synchronous on purpose — deterministic SQL, no LLM call, nothing to move.
+Uses `SimpleWorker` (runs jobs in-process), not RQ's default `Worker`, because the default forks
+a subprocess per job via `os.fork()` — unavailable on Windows, this project's dev platform.
+
+**M4 — End-to-end hardening pass:** a real two-container run (not simulated) confirmed
+cross-container auth and a genuinely shared rate-limit cap. **Known, deliberately-deferred
+limitation, confirmed by actually killing a real worker mid-job, not assumed:** a worker that
+dies from an uncaught exception (or an RQ `job_timeout`) correctly marks its `Job` row `failed`
+with the real error (verified against a real Groq 429) — but a `SIGKILL`'d worker leaves the row
+stuck at `running` forever, with no heartbeat/staleness reconciliation to reclaim it. Flagged as
+an open item below, not silently left undocumented.
+
+**Real bugs found and fixed, not caught by design review (full detail in phase7_scope.md):**
+1. RQ pickles job payloads onto its Redis connection; every other client in this backend uses
+   `decode_responses=True`, which would silently corrupt that binary data. Fixed with a dedicated
+   `build_rq_connection()` in `jobs.py`, never shared with the rate-limit/cache connection.
+2. The shared per-test transaction-rollback fixture (`real_db_client`) made a `Job` row invisible
+   to the worker's separate DB connection — the worker silently no-op'd, leaving the job looking
+   permanently stuck at `pending` from the test's point of view. This was functionally the exact
+   "stuck job" failure mode M3's success metrics exist to catch, just caused by test isolation
+   rather than a real crash. Fixed with a new `committing_client` test fixture (real commits, no
+   transaction wrapping) used only where the async job path is actually exercised.
+3. `alembic_version` said the Phase 6 schema was applied; the physical tables didn't exist (this
+   backend's own test suite never touches Alembic — `Base.metadata.create_all()`/`drop_all()`
+   directly — so nothing had exercised `alembic upgrade head` against the real dev volume before).
+   Fixed with `alembic stamp base` + `alembic upgrade head`, confirmed via `\dt` before generating
+   the `jobs` migration; verified its full upgrade→downgrade→upgrade round-trip too.
+4. `GROQ_MODEL`'s original default (`llama-3.3-70b-versatile`, from Phase 5/6) had been
+   deprecated by Groq since Phase 6 shipped — 404 `model_not_found` on every call, unrelated to
+   Phase 7 but blocking its verification. Fixed the default to `openai/gpt-oss-120b` (what
+   `poc4_nl_chatbot`'s own `.env` already used, and CLAUDE.md's POC4 M4 evaluation verified
+   working).
+
+87 tests passing (including two real-Groq/real-infra integration tests and a real two-container
+multi-instance regression pass — `tests/test_multi_instance.py`), `docker build -f
+backend/Dockerfile -t insightflow-backend .` verified with the new `redis`/`rq` dependencies, real
+`redis`/`worker` containers confirmed working end to end (`docker-compose.yml` gained both
+services). Docs: `backend/docs/phase7_scope.md` (full scope + milestone-by-milestone findings
+log), `backend/docs/hld.md` (updated with the new async/caching request flow),
+`backend/docs/phase6_deployment.md` (rate-limiting section updated now that it's Redis-backed).
+
+**One open item carried forward, not resolved by Phase 7:** a `SIGKILL`'d worker's `Job` row has
+no path back from `running` — a future fix would need a periodic staleness check (requeue/fail
+any `running` job whose `updated_at` is older than `discovery_job_timeout_seconds`), deliberately
+out of scope here since it's new machinery, not a completion of what M3 already built.
+
 ---
 
 ## 7. Open technical decisions (unresolved — surface before deciding unilaterally)
@@ -436,16 +508,17 @@ routes to existing pipelines" instead of a rewrite.
 
 ## 10. Working agreement for this session
 
-- POC 1–4 and Phases 5–6 are all done and closed. Don't start Phase 7+ work (Redis/background
-  workers, React frontend, Power BI, further deployment/security hardening beyond what Phase 6
-  already added) without the user explicitly asking for it first.
+- POC 1–4 and Phases 5–7 are all done and closed. Don't start Phase 8+ work (React frontend,
+  Power BI, further deployment/security hardening beyond what Phase 6/7 already added) without
+  the user explicitly asking for it first.
 - Don't build POC 3 component types beyond `KPI`/`LINE_CHART`/`BAR_CHART`/`PIE_CHART`/`TABLE`
   without first building the B3/B4 primitives in POC 2 that back them.
 - Don't silently resolve the two open technical decisions in §7 — surface them for a decision
   when they become blocking.
 - Reuse existing types (`MetricResult`, `AnalyticalQuery`, `SemanticModel`, `HydratedDashboard`,
-  `Answer`, and Phase 6's `Dataset`/`Membership`/`Role`/`PipelineCache`) rather than inventing
-  parallel ones, per the established minimal-surface-area convention.
+  `Answer`, Phase 6's `Dataset`/`Membership`/`Role`/`PipelineCache`, and Phase 7's
+  `Job`/`JobStatus`/`ResultCache`/`RedisRateLimiter`) rather than inventing parallel ones, per the
+  established minimal-surface-area convention.
 - Import paths changed in Phase 5 — each POC's own package is now `insightflow_schema_discovery`
   / `insightflow_analytics` / `insightflow_dashboard` / `insightflow_chatbot`, not `insightflow`.
   If you see `from insightflow.` anywhere it's stale and should be fixed, not copied.
@@ -457,3 +530,21 @@ routes to existing pipelines" instead of a rewrite.
   bit us once already in M6 (the auth rate limiter leaked state across every FastAPI app instance
   in the same process, including every independent test's `TestClient`, until moved to
   `app.state`).
+- `backend/tests`' shared per-test isolation strategy (`real_db_client`, wraps everything in a
+  transaction that's rolled back, never committed) is incompatible with anything that reads the
+  DB through a *different* connection within the same test — e.g. an RQ worker, even an in-process
+  `SimpleWorker`. Use the `committing_client` fixture (real commits, no transaction wrapping) for
+  any test exercising the async discovery job path; found the hard way in Phase 7 M3 when a `Job`
+  row created inside a rolled-back transaction was invisible to the worker, which silently no-op'd
+  instead of erroring.
+- RQ needs its own Redis connection, never the one shared by rate limiting/result caching —
+  `decode_responses=True` (used everywhere else) corrupts RQ's pickled job payloads. Use
+  `jobs.build_rq_connection()`.
+- Use `SimpleWorker`, not RQ's default `Worker`, for anything running on this project's own dev
+  machine — the default forks a subprocess per job via `os.fork()`, unavailable on Windows.
+  Real Linux deployment containers (the `worker` service) would tolerate either, but keep them
+  the same to avoid two code paths.
+- A `SIGKILL`'d worker leaves its `Job` row stuck at `running` forever — confirmed for real in
+  Phase 7 M4, not just a theoretical gap. Don't assume job-status polling alone means a stuck job
+  will eventually resolve; there's no watchdog/staleness reconciliation yet (see §6's Phase 7
+  section for the fix shape if this becomes a real problem).

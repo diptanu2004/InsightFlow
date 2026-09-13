@@ -15,11 +15,13 @@ from insightflow_backend.db.models import AuditLog
 from insightflow_backend.db.session import get_db
 from insightflow_backend.main import create_app
 from tests.db.conftest import db_engine  # noqa: F401 -- reused fixture
-from tests.infra import requires_postgres
+from tests.infra import requires_postgres, reset_rate_limits, skip_if_redis_unavailable
 
 
 @pytest.fixture
 def client_and_db(db_engine):  # noqa: F811
+    skip_if_redis_unavailable()  # /auth/register (used to obtain a token) is now Redis-gated
+    reset_rate_limits()  # every TestClient shares one fake IP -- start each test with a clean bucket
     connection = db_engine.connect()
     transaction = connection.begin()
     SessionLocal = sessionmaker(bind=connection)

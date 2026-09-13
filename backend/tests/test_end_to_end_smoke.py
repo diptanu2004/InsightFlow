@@ -9,7 +9,7 @@ import os
 import pytest
 
 from tests.conftest import SAMPLE_DATA_DIR
-from tests.infra import requires_infra, requires_postgres
+from tests.infra import requires_infra, requires_postgres, run_pending_jobs
 
 requires_groq = pytest.mark.skipif(not os.getenv("GROQ_API_KEY"), reason="requires a real GROQ_API_KEY")
 
@@ -32,13 +32,24 @@ def _create_project(client, token, org_name="SmokeCo", project_name="Smoke Proje
     return project
 
 
-def _upload_sample_files(client, token, project_id):
+def _upload_sample_files_and_wait(client, token, project_id):
+    """Phase 7 M3: schema/discover is async now -- submit, drain the real job queue synchronously
+    (run_pending_jobs, a real RQ worker in burst mode, not a mock), then poll the job once more
+    for the finished status. Returns the job-status response, whose `.json()["dataset"]` is the
+    same shape the old synchronous 201 response used to return directly.
+    """
     files = [
         ("files", ("customers.csv", open(SAMPLE_DATA_DIR / "customers.csv", "rb"), "text/csv")),
         ("files", ("orders.csv", open(SAMPLE_DATA_DIR / "orders.csv", "rb"), "text/csv")),
         ("files", ("products.csv", open(SAMPLE_DATA_DIR / "products.csv", "rb"), "text/csv")),
     ]
-    return client.post(f"/projects/{project_id}/schema/discover", files=files, headers=_auth(token))
+    submitted = client.post(f"/projects/{project_id}/schema/discover", files=files, headers=_auth(token))
+    if submitted.status_code != 202:
+        return submitted  # let the caller assert on the actual (unexpected) status/body
+
+    run_pending_jobs()
+    job_id = submitted.json()["id"]
+    return client.get(f"/projects/{project_id}/schema/jobs/{job_id}", headers=_auth(token))
 
 
 @requires_postgres
@@ -109,13 +120,16 @@ def test_viewer_cannot_upload_dataset(client):
 
 @requires_infra
 @requires_groq
-def test_full_flow_against_sample_data(client):
+def test_full_flow_against_sample_data(committing_client):
+    client = committing_client
     token = _register_and_login(client)
     project = _create_project(client, token)
 
-    r = _upload_sample_files(client, token, project["id"])
-    assert r.status_code == 201, r.text
-    dataset = r.json()
+    r = _upload_sample_files_and_wait(client, token, project["id"])
+    assert r.status_code == 200, r.text
+    job = r.json()
+    assert job["status"] == "done", job
+    dataset = job["dataset"]
     assert dataset["semantic_model"]["entities"]
 
     query = {"operation": "aggregate", "metric": "revenue"}
