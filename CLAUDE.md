@@ -98,11 +98,10 @@ Phase 10 — Security + Observability + Deployment
 Rationale: validate every hard AI/system component in isolation (headless, CLI-driven, own venv)
 before integrating. Do not build auth/Redis/React/Power BI alongside the POCs.
 
-### Current status: POC 1, POC 2, POC 3, and POC 4 are all done.
-Phase 5+ (FastAPI integration, frontend, full-stack wiring) has not been started. The prior
-"don't sketch Phase 5+ until POC 4 is complete" restriction no longer applies now that POC 4 is
-done, but Phase 5+ work should still be explicitly requested, not assumed — confirm with the user
-before starting integration work.
+### Current status: POC 1–4 and Phase 5 are all done and closed.
+Phase 6+ (auth, multi-tenancy, Redis, frontend, Power BI, deployment hardening) has not been
+started. Phase 6+ work should still be explicitly requested, not assumed — confirm with the user
+before starting it.
 
 ---
 
@@ -142,7 +141,7 @@ Two-phase discipline mirrors "LLMs understand, deterministic systems calculate":
    `AnalyticalQuery` per component and runs it through POC 2's existing pipeline, producing a
    `HydratedDashboard` (spec + real `MetricResult` per component).
 `DashboardGenerationPipeline` orchestrates all of it. Code lives in
-`poc3_dashboard_generation/src/insightflow/dashboard/` (spec, signal, validator, resolver,
+`poc3_dashboard_generation/src/insightflow_dashboard/dashboard/` (spec, signal, validator, resolver,
 planner, planner_context, hydrated, pipeline) and `.../llm/` (vendored `LLMClient`/
 `GroqLLMClient` from POC1).
 
@@ -185,7 +184,7 @@ NL Question → Question Planner (LLM, not built yet) → QuestionIntent
   → QuestionResult → Insight LLM (not built yet) → Answer + Explanation
 ```
 Depends on `insightflow_core` directly from day one (no fourth vendored copy), per the resolved
-open decision in §7. Code lives in `poc4_nl_chatbot/src/insightflow/models/` (`TimeExpression`,
+open decision in §7. Code lives in `poc4_nl_chatbot/src/insightflow_chatbot/models/` (`TimeExpression`,
 `QuestionIntent`/`QuestionOperation`, `ResolvedQuery`, `CategoryDelta`/`QuestionResult`/`Answer`)
 and `.../services/` (`TimeExpressionResolver`, `QueryAssembler`, `QuestionValidator`,
 `ResultDiffer`, `QuestionExecutor`).
@@ -258,6 +257,48 @@ covering the six implementation-blocking decisions made before code: category-se
 handling, ranking convention, `TimeExpression` enum scope, growth comparison-period convention,
 refusal benchmark timing, `reference_date` sourcing).
 
+### Phase 5 — FastAPI Backend Integration (done, closed)
+One FastAPI app (`backend/`, package `insightflow-backend`) wiring all four POCs +
+`insightflow_core` behind HTTP routes — "wire routes to existing pipelines," no pipeline logic
+rewritten.
+
+**Blocking issue found and resolved first: package-name collision.** All four POCs had declared
+the same top-level import package (`insightflow`), which prevented importing more than one into
+a single process. Renamed each POC's `src/insightflow/` → a unique package, updating imports/
+`pyproject.toml`/tests/scripts/examples in each:
+- `poc1_schema_discovery` → `insightflow_schema_discovery`
+- `poc2_analytics_engine` → `insightflow_analytics` (no pipeline class of its own anymore — its
+  engine lives in `insightflow_core`; the backend does not depend on this package)
+- `poc3_dashboard_generation` → `insightflow_dashboard`
+- `poc4_nl_chatbot` → `insightflow_chatbot`
+- `insightflow_core` — unchanged
+
+Every POC's own test suite (plus `insightflow_core`'s) was re-verified green standalone
+immediately after its rename, before the backend was built on top.
+
+**Backend package** (`backend/src/insightflow_backend/`): `wiring.py` calls each POC's own
+pipeline/builder unchanged (`SchemaDiscoveryPipeline.run()`, `insightflow_core.pipeline
+.build_pipeline()`, `insightflow_dashboard`'s `build_dashboard_pipeline()`,
+`insightflow_chatbot`'s `build_question_answering_pipeline()`); `session.py` holds one in-memory
+`SessionState` in `app.state` (single global session — no DB/multi-tenancy yet, that's Phase 6)
+with lazy-built + cached pipelines per uploaded dataset; `registry/bootstrap.py` is one canonical
+copy of the registry (the three POC-local vendored copies were deliberately left in place — each
+POC's own tests still import their own copy). Routes: `POST /schema/discover` (CSV upload only —
+`insightflow_core`'s `QueryExecutor.register_sources` hardcodes a `.csv` lookup per entity
+regardless of what POC 1's parser would otherwise accept), `POST /analytics/query`,
+`POST /dashboard/generate`, `POST /chat/ask`, `GET /health`. Calling query/dashboard/chat before
+any upload returns `409`, not a crash.
+
+POC 1's own `SemanticModel` and `insightflow_core`'s (field-identical, not the same class — see
+§7.1) are bridged via the same JSON round-trip every POC script already used, just done
+in-memory in `wiring.run_schema_discovery()` instead of via a file.
+
+**Verified end-to-end, not just unit-tested:** a real-data, real-Groq smoke test drives all 4
+endpoints in sequence (upload → query → dashboard → chat) and passes; 194 tests green across all
+6 packages; `docker build -f backend/Dockerfile -t insightflow-backend .` (root-context build,
+needed since path deps require sibling POC directories) builds cleanly and the container serves
+`/health`/`/docs`. Docs: `backend/docs/hld.md`, `docs/class_diagram.md`.
+
 ---
 
 ## 7. Open technical decisions (unresolved — surface before deciding unilaterally)
@@ -310,12 +351,14 @@ each component should be graded against ground truth or a rubric:
 poc{N}_{name}/
 ├── pyproject.toml       # uv-managed
 ├── Dockerfile
-├── src/insightflow/
+├── src/insightflow_{name}/   # renamed from src/insightflow/ during Phase 5 to resolve a
+│   │                          #   top-level import collision once all POCs share one process —
+│   │                          #   see §6's Phase 5 section for the full old->new name mapping
 │   ├── models/          # pure pydantic types, fully typed, testable without an LLM
 │   ├── services/         # LLM planners, validators, resolvers — isolated behind interfaces
 │   └── pipeline.py       # single orchestrator class: Pipeline.run(...) -> Result
 │                          #   e.g. AnalyticsEnginePipeline.run(), DashboardGenerationPipeline.run()
-│                          #   this is the entire integration surface for later FastAPI wiring
+│                          #   this was the entire integration surface Phase 5's FastAPI wiring used
 ├── docs/
 │   ├── hld.md
 │   └── class_diagram.md
@@ -324,19 +367,23 @@ poc{N}_{name}/
 ```
 
 Convention to preserve: **pure model layer first, services layer behind clear interfaces, one
-orchestrator entrypoint per POC.** This is what let Phase 5 stay "wire routes to existing
-pipelines" instead of a rewrite.
+orchestrator entrypoint per POC.** This is what let Phase 5's `backend/` package stay "wire
+routes to existing pipelines" instead of a rewrite.
 
 ---
 
 ## 10. Working agreement for this session
 
-- POC 4 is now done, so the original "don't sketch Phase 5+ until POC 4 is done" gate has been
-  satisfied — but still don't start FastAPI integration, frontend, or full-stack wiring work
-  without the user explicitly asking for it first.
+- POC 1–4 and Phase 5 are all done and closed. Don't start Phase 6+ work (auth, multi-tenancy,
+  Redis/background workers, React frontend, Power BI, deployment hardening) without the user
+  explicitly asking for it first.
 - Don't build POC 3 component types beyond `KPI`/`LINE_CHART`/`BAR_CHART`/`PIE_CHART`/`TABLE`
   without first building the B3/B4 primitives in POC 2 that back them.
 - Don't silently resolve the two open technical decisions in §7 — surface them for a decision
   when they become blocking.
-- Reuse existing types (`MetricResult`, `AnalyticalQuery`, `SemanticModel`) rather than inventing
-  parallel ones, per the established minimal-surface-area convention.
+- Reuse existing types (`MetricResult`, `AnalyticalQuery`, `SemanticModel`, `HydratedDashboard`,
+  `Answer`) rather than inventing parallel ones, per the established minimal-surface-area
+  convention.
+- Import paths changed in Phase 5 — each POC's own package is now `insightflow_schema_discovery`
+  / `insightflow_analytics` / `insightflow_dashboard` / `insightflow_chatbot`, not `insightflow`.
+  If you see `from insightflow.` anywhere it's stale and should be fixed, not copied.
