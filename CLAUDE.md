@@ -537,6 +537,16 @@ routes to existing pipelines" instead of a rewrite.
   any test exercising the async discovery job path; found the hard way in Phase 7 M3 when a `Job`
   row created inside a rolled-back transaction was invisible to the worker, which silently no-op'd
   instead of erroring.
+- The backend test suite runs against a **separate** database (`<dev db>_test` by default,
+  auto-created), redirected by `backend/conftest.py` — don't remove that redirection or point
+  tests back at `DATABASE_URL`. `db_engine` calls `create_all()`/`drop_all()`, so sharing the dev
+  database destroyed dev data on every run, and since `alembic_version` isn't in `Base.metadata`
+  it survived `drop_all()` still claiming head — leaving `alembic current` insisting the schema
+  was applied while every request failed with `relation "users" does not exist`. That's the real
+  cause of what Phase 7 M3 logged as finding #3 and "fixed" with a one-off
+  `alembic stamp base` + `upgrade head`; it recurred every test run until Phase 8 M1.
+  The redirection lives in the *root* conftest because `db/session.py` binds its engine at import
+  time and `tests/infra.py` evaluates `requires_postgres` at import time.
 - RQ needs its own Redis connection, never the one shared by rate limiting/result caching —
   `decode_responses=True` (used everywhere else) corrupts RQ's pickled job payloads. Use
   `jobs.build_rq_connection()`.
