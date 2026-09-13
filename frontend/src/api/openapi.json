@@ -355,9 +355,7 @@
             "type": "string"
           },
           "semantic_model": {
-            "additionalProperties": true,
-            "title": "Semantic Model",
-            "type": "object"
+            "$ref": "#/components/schemas/SemanticModel"
           }
         },
         "required": [
@@ -368,6 +366,27 @@
           "created_at"
         ],
         "title": "DatasetOut",
+        "type": "object"
+      },
+      "Entity": {
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "fields"
+        ],
+        "title": "Entity",
         "type": "object"
       },
       "FilterSpec": {
@@ -915,6 +934,41 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "Relationship": {
+        "properties": {
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "from_field": {
+            "title": "From Field",
+            "type": "string"
+          },
+          "to_field": {
+            "title": "To Field",
+            "type": "string"
+          },
+          "validated": {
+            "default": true,
+            "title": "Validated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "from_field",
+          "to_field",
+          "confidence",
+          "direction"
+        ],
+        "title": "Relationship",
+        "type": "object"
+      },
       "Role": {
         "description": "RBAC roles per CLAUDE.md \u00a74, ordered weakest to strongest -- see auth/rbac.py for the\nordering logic that `require_role` depends on.",
         "enum": [
@@ -925,6 +979,58 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "SemanticField": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "source_column": {
+            "title": "Source Column",
+            "type": "string"
+          },
+          "source_file": {
+            "title": "Source File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "source_column",
+          "source_file",
+          "confidence"
+        ],
+        "title": "SemanticField",
+        "type": "object"
+      },
+      "SemanticModel": {
+        "properties": {
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/Entity"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "relationships": {
+            "items": {
+              "$ref": "#/components/schemas/Relationship"
+            },
+            "title": "Relationships",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entities",
+          "relationships"
+        ],
+        "title": "SemanticModel",
+        "type": "object"
       },
       "SortSpec": {
         "properties": {
@@ -1838,6 +1944,54 @@
         "summary": "Generate Dashboard",
         "tags": [
           "dashboard"
+        ]
+      }
+    },
+    "/projects/{project_id}/datasets": {
+      "get": {
+        "description": "A project's datasets, newest first -- so `[0]` is the one query/dashboard/chat actually run\nagainst (`dataset_deps.get_latest_dataset` resolves the same row).\n\nAdded in Phase 8 M3: without it the frontend could only ever see a semantic model in the\nresponse of the discovery job it just polled, so a page reload left the UI unable to tell\nwhether the project had any data at all. Returns full semantic models rather than a summary\nplus a detail route -- one upload is one row and a model is a few KB, so the simpler shape\ncovers both \"does this project have data\" and \"show me the current model\" in one request.",
+        "operationId": "list_datasets_projects__project_id__datasets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetOut"
+                  },
+                  "title": "Response List Datasets Projects  Project Id  Datasets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Datasets",
+        "tags": [
+          "schema"
         ]
       }
     },

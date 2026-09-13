@@ -139,3 +139,12 @@ export function postJson<T>(path: string, payload: unknown): Promise<T> {
     body: JSON.stringify(payload),
   })
 }
+
+/**
+ * Multipart POST. Content-Type is left unset on purpose so the browser generates it with the
+ * correct boundary. Safe to go through `request`'s retry-after-refresh path: a FormData body can
+ * be serialized more than once, unlike a stream.
+ */
+export function postForm<T>(path: string, form: FormData): Promise<T> {
+  return request<T>(path, { method: 'POST', body: form })
+}

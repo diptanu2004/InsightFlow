@@ -256,6 +256,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Datasets
+         * @description A project's datasets, newest first -- so `[0]` is the one query/dashboard/chat actually run
+         *     against (`dataset_deps.get_latest_dataset` resolves the same row).
+         *
+         *     Added in Phase 8 M3: without it the frontend could only ever see a semantic model in the
+         *     response of the discovery job it just polled, so a page reload left the UI unable to tell
+         *     whether the project had any data at all. Returns full semantic models rather than a summary
+         *     plus a detail route -- one upload is one row and a model is a few KB, so the simpler shape
+         *     covers both "does this project have data" and "show me the current model" in one request.
+         */
+        get: operations["list_datasets_projects__project_id__datasets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/schema/discover": {
         parameters: {
             query?: never;
@@ -434,10 +461,14 @@ export interface components {
              * Format: uuid
              */
             project_id: string;
-            /** Semantic Model */
-            semantic_model: {
-                [key: string]: unknown;
-            };
+            semantic_model: components["schemas"]["SemanticModel"];
+        };
+        /** Entity */
+        Entity: {
+            /** Fields */
+            fields: components["schemas"]["SemanticField"][];
+            /** Name */
+            name: string;
         };
         /** FilterSpec */
         FilterSpec: {
@@ -692,6 +723,22 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** Relationship */
+        Relationship: {
+            /** Confidence */
+            confidence: number;
+            /** Direction */
+            direction: string;
+            /** From Field */
+            from_field: string;
+            /** To Field */
+            to_field: string;
+            /**
+             * Validated
+             * @default true
+             */
+            validated: boolean;
+        };
         /**
          * Role
          * @description RBAC roles per CLAUDE.md §4, ordered weakest to strongest -- see auth/rbac.py for the
@@ -699,6 +746,24 @@ export interface components {
          * @enum {string}
          */
         Role: "viewer" | "analyst" | "admin" | "owner";
+        /** SemanticField */
+        SemanticField: {
+            /** Confidence */
+            confidence: number;
+            /** Name */
+            name: string;
+            /** Source Column */
+            source_column: string;
+            /** Source File */
+            source_file: string;
+        };
+        /** SemanticModel */
+        SemanticModel: {
+            /** Entities */
+            entities: components["schemas"]["Entity"][];
+            /** Relationships */
+            relationships: components["schemas"]["Relationship"][];
+        };
         /** SortSpec */
         SortSpec: {
             /**
@@ -1332,6 +1397,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HydratedDashboard"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_datasets_projects__project_id__datasets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetOut"][];
                 };
             };
             /** @description Validation Error */

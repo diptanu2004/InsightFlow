@@ -36,6 +36,12 @@ export type QuestionOperation = S['QuestionOperation']
 export type CategoryDelta = S['CategoryDelta']
 export type TimeExpression = S['TimeExpression']
 
+// -- POC 1: the semantic model discovery produces --
+export type SemanticModel = S['SemanticModel']
+export type Entity = S['Entity']
+export type SemanticField = S['SemanticField']
+export type Relationship = S['Relationship']
+
 // -- Phase 6/7: tenancy, datasets, async jobs --
 export type OrganizationOut = S['OrganizationOut']
 export type ProjectOut = S['ProjectOut']

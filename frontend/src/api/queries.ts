@@ -4,8 +4,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { postJson, request } from './client'
-import type { OrganizationOut, ProjectOut } from './types'
+import { postForm, postJson, request } from './client'
+import type { DatasetOut, JobOut, OrganizationOut, ProjectOut } from './types'
 
 const ORGANIZATIONS_KEY = ['organizations']
 
@@ -60,5 +60,45 @@ export function useProject(projectId: string | undefined) {
     queryKey: ['project', projectId],
     queryFn: () => request<ProjectOut>(`/projects/${projectId}`),
     enabled: projectId !== undefined,
+  })
+}
+
+/** Newest first, so `[0]` is the dataset query/dashboard/chat actually run against. */
+export function useDatasets(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ['datasets', projectId],
+    queryFn: () => request<DatasetOut[]>(`/projects/${projectId}/datasets`),
+    enabled: projectId !== undefined,
+  })
+}
+
+export function useUploadDataset(projectId: string | undefined) {
+  return useMutation({
+    mutationFn: (files: File[]) => {
+      const form = new FormData()
+      for (const file of files) form.append('files', file)
+      // Returns 202 + a job id, not a dataset -- discovery is LLM-heavy and runs on an RQ
+      // worker (Phase 7 M3). Poll with `useDiscoveryJob`.
+      return postForm<JobOut>(`/projects/${projectId}/schema/discover`, form)
+    },
+  })
+}
+
+/** Terminal job states -- polling stops here rather than hammering the route forever. */
+const TERMINAL_JOB_STATUSES = new Set<JobOut['status']>(['done', 'failed'])
+
+export function useDiscoveryJob(projectId: string | undefined, jobId: string | null) {
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: ['discoveryJob', projectId, jobId],
+    queryFn: async () => {
+      const job = await request<JobOut>(`/projects/${projectId}/schema/jobs/${jobId}`)
+      // The new dataset becomes "the" dataset for the project the moment discovery finishes.
+      if (job.status === 'done') await queryClient.invalidateQueries({ queryKey: ['datasets', projectId] })
+      return job
+    },
+    enabled: jobId !== null && projectId !== undefined,
+    refetchInterval: (query) =>
+      query.state.data && TERMINAL_JOB_STATUSES.has(query.state.data.status) ? false : 1500,
   })
 }
