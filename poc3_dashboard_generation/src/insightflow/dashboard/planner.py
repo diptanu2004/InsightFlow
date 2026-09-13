@@ -87,7 +87,10 @@ class DashboardPlanner:
 
     @staticmethod
     def _format_signal(signal) -> str:
+        # `shape` (not value-presence) is the authoritative signal for scalar vs. grouped --
+        # SignalGatherer never actually hands this an undefined scalar (it filters those out
+        # itself), but branching on `shape` here is still the correct check, not an inference.
         result = signal.result
-        if result.value is not None:
+        if result.shape == "scalar":
             return f"{result.value:.2f}"
         return str(result.rows)

@@ -39,6 +39,6 @@ isolated POCs before anything is integrated into the final FastAPI app — this 
 | 1 — Schema Discovery + Relationship Detection | `poc1_schema_discovery/` | Closed — see its own README's "POC 1 status: closed" |
 | 2 — Analytics Engine | `poc2_analytics_engine/` | Closed — verified end-to-end against a sample dataset and the real, full-scale (~99.4k order) Olist dataset; see its own README's "POC 2 status: closed" |
 | 3 — Dashboard Generation | `poc3_dashboard_generation/` | Implemented, first pass — not yet closed (no real Groq run of the planner in this environment, no multi-dataset evaluation benchmark yet); see its own README's "POC 3 status" |
-| 4 — Natural Language Analytics Chatbot | `poc4_nl_chatbot/` | Not started |
+| 4 — Natural Language Analytics Chatbot | `poc4_nl_chatbot/` | Closed — M1-M4 all done; 69 tests passing plus a real-Groq M4 evaluation run (16/16 refusal, 8/8 intent, 8/8 plan, 4/4 numeric accuracy, 0 hallucinations); found and fixed 3 real bugs in the shared `insightflow_core` engine and 1 real planner-prompt bug along the way; see its own `docs/hld.md`/`docs/class_diagram.md`/`docs/m4_evaluation_results.md` |
 
 See each POC's own `README.md` for setup and run instructions.

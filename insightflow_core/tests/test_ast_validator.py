@@ -94,3 +94,60 @@ def test_validate_accepts_group_by_on_base_measure():
     query = AnalyticalQuery(operation=OperationType.GROUP_BY, metric="revenue", dimension="revenue")
     result = validator.validate(query)
     assert result.is_valid
+
+
+def test_validate_rejects_time_filter_against_a_measure_whose_entity_has_no_time_field():
+    # Found via POC 4's real-Olist integration test: an AGGREGATE query for a bare measure on an
+    # entity with no "transaction_date" field (real Olist's "revenue", on `payments`) used to
+    # compile fine as far as this validator was concerned, then crash with an unhandled KeyError
+    # deep inside SQLCompiler/FieldResolver -- the same class of gap _validate_growth already
+    # closed for GROWTH queries, generalized here to plain AGGREGATE/GROUP_BY + time_filter.
+    from datetime import date
+
+    from insightflow_core.models import TimeFilter
+    from insightflow_core.models.registry import AggregationType, Measure
+
+    sm = _semantic_model_with_collision()  # "orders" entity here has no transaction_date field
+    registry = MetricRegistry()
+    registry.register_measure(Measure(name="revenue", entity="orders", source_field="revenue", aggregation=AggregationType.SUM))
+    validator = ASTValidator(registry, sm, max_row_limit=1000)
+
+    query = AnalyticalQuery(
+        operation=OperationType.AGGREGATE,
+        metric="revenue",
+        time_filter=TimeFilter(start_date=date(2024, 1, 1), end_date=date(2024, 12, 31)),
+    )
+    result = validator.validate(query)
+    assert not result.is_valid
+    assert any(e.code == "time_filter_entity_missing_time_field" for e in result.errors)
+
+
+def test_validate_accepts_time_filter_against_a_measure_whose_entity_has_a_time_field():
+    from datetime import date
+
+    from insightflow_core.models import Entity, SemanticField, TimeFilter
+    from insightflow_core.models.registry import AggregationType, Measure
+
+    sm = SemanticModel(
+        entities=[
+            Entity(
+                name="orders",
+                fields=[
+                    SemanticField(name="revenue", source_column="revenue", source_file="orders", confidence=1.0),
+                    SemanticField(name="transaction_date", source_column="order_date", source_file="orders", confidence=1.0),
+                ],
+            )
+        ],
+        relationships=[],
+    )
+    registry = MetricRegistry()
+    registry.register_measure(Measure(name="revenue", entity="orders", source_field="revenue", aggregation=AggregationType.SUM))
+    validator = ASTValidator(registry, sm, max_row_limit=1000)
+
+    query = AnalyticalQuery(
+        operation=OperationType.AGGREGATE,
+        metric="revenue",
+        time_filter=TimeFilter(start_date=date(2024, 1, 1), end_date=date(2024, 12, 31)),
+    )
+    result = validator.validate(query)
+    assert result.is_valid

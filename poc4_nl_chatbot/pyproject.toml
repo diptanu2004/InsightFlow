@@ -1,0 +1,37 @@
+[project]
+name = "insightflow"
+version = "0.1.0"
+description = "InsightFlow POC 4 - Natural Language Analytics Chatbot"
+requires-python = ">=3.11"
+# QuestionPlanner and InsightGenerator are POC 4's two LLM calls (hld.md's "Scope decided so
+# far"), same provider POC 1/3 use -- langchain/langchain-groq are real dependencies here, same
+# reasoning as poc3_dashboard_generation/pyproject.toml. No duckdb/sqlglot direct dependency: POC 4
+# never touches SQL compilation itself, only insightflow_core does (transitively, as its own
+# dependency) -- unlike POC 3, none of this POC's own code imports them directly.
+dependencies = [
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "langchain>=0.3",
+    "langchain-groq>=0.2",
+    "insightflow-core",
+]
+
+[tool.uv.sources]
+# Local, editable, path-based -- NOT a uv workspace, deliberately: see
+# poc2_analytics_engine/pyproject.toml's identical note and insightflow_core/README.md for why
+# (keeps this POC's venv fully independent, just installing one shared package into it instead
+# of hand-vendoring a fourth copy of the engine).
+insightflow-core = { path = "../insightflow_core", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insightflow"]

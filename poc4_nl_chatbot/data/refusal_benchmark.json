@@ -1,0 +1,94 @@
+[
+  {
+    "question": "What is our total revenue?",
+    "expected_answerable": true,
+    "expected_metric": "revenue",
+    "expected_operation": "aggregate",
+    "expected_value": 790.0
+  },
+  {
+    "question": "How many orders have we had?",
+    "expected_answerable": true,
+    "expected_metric": "orders",
+    "expected_operation": "aggregate",
+    "expected_value": 7.0
+  },
+  {
+    "question": "What is our average order value?",
+    "expected_answerable": true,
+    "expected_metric": "aov",
+    "expected_operation": "aggregate",
+    "expected_value": 112.85714285714286
+  },
+  {
+    "question": "Break down revenue by category.",
+    "expected_answerable": true,
+    "expected_metric": "revenue",
+    "expected_operation": "group_by"
+  },
+  {
+    "question": "Show revenue by region.",
+    "expected_answerable": true,
+    "expected_metric": "revenue",
+    "expected_operation": "group_by"
+  },
+  {
+    "question": "How much did revenue grow last quarter?",
+    "expected_answerable": true,
+    "expected_metric": "revenue_growth",
+    "expected_operation": "growth"
+  },
+  {
+    "question": "What is our repeat purchase rate?",
+    "expected_answerable": true,
+    "expected_metric": "repeat_purchase_rate",
+    "expected_operation": "aggregate",
+    "expected_value": 0.5
+  },
+  {
+    "question": "Which category drove the change in revenue last quarter?",
+    "expected_answerable": true,
+    "expected_metric": "revenue",
+    "expected_operation": "growth_by_dimension"
+  },
+  {
+    "question": "What is our website conversion rate?",
+    "expected_answerable": false,
+    "_rejection_category": "no such data at all (architecture doc §16's own example)"
+  },
+  {
+    "question": "How much are we spending on marketing?",
+    "expected_answerable": false,
+    "_rejection_category": "no such data at all -- no marketing-spend entity"
+  },
+  {
+    "question": "What is our customer satisfaction score?",
+    "expected_answerable": false,
+    "_rejection_category": "no such data at all -- no survey/NPS data"
+  },
+  {
+    "question": "How many units do we currently have in inventory?",
+    "expected_answerable": false,
+    "_rejection_category": "no such data at all -- no inventory entity"
+  },
+  {
+    "question": "What is our customer lifetime value?",
+    "expected_answerable": false,
+    "_rejection_category": "unregistered metric -- ASTValidator's unknown_metric"
+  },
+  {
+    "question": "Break down revenue by sales channel.",
+    "expected_answerable": false,
+    "_rejection_category": "unknown dimension -- ASTValidator's unknown_dimension"
+  },
+  {
+    "question": "What is the correlation between price and repeat purchase rate?",
+    "expected_answerable": false,
+    "_rejection_category": "no such data/primitive -- correlation is not a supported operation"
+  },
+  {
+    "question": "Show me the repeat purchase rate trend over the last 6 months.",
+    "expected_answerable": false,
+    "_rejection_category": "unsupported metric/operation combination -- ASTValidator's time_filter_unsupported_for_metric_kind (HAVING_RATIO + time_filter)"
+  }
+]

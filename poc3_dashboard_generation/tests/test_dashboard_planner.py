@@ -8,7 +8,7 @@ from insightflow_core.models import MetricResult, QueryMetadata
 def _sample_context() -> PlannerContext:
     signal = SignalResult(
         name="total_revenue",
-        result=MetricResult(metric_name="revenue", value=790.0, metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1)),
+        result=MetricResult(metric_name="revenue", shape="scalar", value=790.0, metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1)),
     )
     return PlannerContext(
         entities=["orders", "customers", "products"],

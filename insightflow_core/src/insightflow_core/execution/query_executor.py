@@ -71,9 +71,9 @@ class QueryExecutor:
             value = None
             if rows and rows[0].get("value") is not None:
                 value = float(rows[0]["value"])
-            return MetricResult(metric_name=metric_name, value=value, metadata=metadata)
+            return MetricResult(metric_name=metric_name, shape="scalar", value=value, metadata=metadata)
 
-        return MetricResult(metric_name=metric_name, rows=rows, metadata=metadata)
+        return MetricResult(metric_name=metric_name, shape="grouped", rows=rows, metadata=metadata)
 
     def _run_with_timeout(self, sql: str, params: dict) -> list[dict]:
         # DuckDB's Python API has no first-class per-query wall-clock timeout that's portable

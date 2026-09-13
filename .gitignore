@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Env / secrets
+.env
+
+# Local analytical DB files
+*.duckdb
+
+# Large raw datasets (fetch separately; too large for git)
+Brazillian_Ecom_dataset/
+poc2_analytics_engine/examples/real_olist_full_scale/data/raw/

@@ -13,13 +13,18 @@ from the dataset's own date range, not wall-clock "today"; that capability doesn
 so callers (tests, and a future real MAX(date) capability) can override it. Against this POC's own
 static, historically-dated sample dataset (Nov 2025 - Feb 2026), a wall-clock "today" reference in
 2026+ puts the comparison window outside the data entirely, making a growth ratio's denominator
-zero -- which is ALSO poc2_analytics_engine's own known open gap (docs/class_diagram.md closure
-finding 8: a genuinely-undefined ratio has no representation and crashes MetricResult instead of
-returning None cleanly). Rather than paper over that with a fake value, `gather()` below simply
-treats any signal query that raises -- a validation rejection (e.g. growth_entity_missing_time_
-field) OR a crash on execution (e.g. the undefined-ratio gap) -- as an infeasible signal for this
-dataset and omits it, exactly per hld.md's "SignalGatherer must handle a rejected signal
-gracefully" note. The planner sees a shorter, honest signal list rather than the whole run failing.
+zero.
+
+That used to ALSO trip `insightflow_core`'s own now-fixed gap (a genuinely-undefined scalar had no
+representation and crashed `MetricResult` instead of returning `value=None` cleanly -- fixed via
+`MetricResult.shape`, found and closed via `poc4_nl_chatbot`'s real-Olist integration test). Now
+that an undefined scalar comes back cleanly as `MetricResult(shape="scalar", value=None)` instead
+of raising, `gather()` below explicitly checks for that case (not just catching an exception) and
+treats it the same as any other infeasible signal -- a validation rejection (e.g.
+growth_entity_missing_time_field), a crash on execution (still possible for other, unrelated
+reasons), OR a clean-but-undefined scalar result -- and omits it, exactly per hld.md's
+"SignalGatherer must handle a rejected signal gracefully" note. The planner sees a shorter, honest
+signal list rather than being shown a KPI whose value is `None`.
 """
 from datetime import date, timedelta
 from typing import Optional
@@ -86,9 +91,15 @@ class SignalGatherer:
             try:
                 result = self.engine.run(signal.query)
             except Exception:
-                # Infeasible for this dataset (missing time field, undefined ratio, unregistered
-                # metric, etc.) -- omit, don't crash the whole generation run. See module
-                # docstring for the concrete gaps this is guarding against.
+                # Infeasible for this dataset (missing time field, unregistered metric, etc.) --
+                # omit, don't crash the whole generation run. See module docstring for the
+                # concrete gaps this is guarding against.
+                continue
+            if result.shape == "scalar" and result.value is None:
+                # A clean, non-crashing but mathematically-undefined scalar (e.g. a growth ratio
+                # whose comparison period matches zero rows) -- see module docstring. Just as
+                # infeasible for the planner's purposes as an outright rejection; omit rather
+                # than showing a KPI whose value is None.
                 continue
             results.append(SignalResult(name=signal.name, result=result))
         return results

@@ -33,6 +33,7 @@ class ASTValidator:
         if query.time_filter is not None:
             errors += self._validate_time_filter(query.time_filter)
             errors += self._validate_time_filter_supported(query.metric)
+            errors += self._validate_time_filter_entity_has_time_field(query.metric)
         if query.growth is not None:
             errors += self._validate_growth(query)
         if query.having_override is not None:
@@ -130,6 +131,56 @@ class ASTValidator:
                     message=(
                         f'metric "{metric}" is kind=having_ratio; time_filter is not supported for '
                         "HAVING_RATIO metrics in POC 2 (not just unvalidated -- see class_diagram.md)"
+                    ),
+                    field="time_filter",
+                )
+            ]
+        return []
+
+    def _validate_time_filter_entity_has_time_field(self, metric: str) -> list[ValidationError]:
+        # Found via POC 4's real-Olist integration test (poc4_nl_chatbot/tests/
+        # test_real_olist_integration.py): an AGGREGATE query for "revenue" (a bare measure on
+        # the `payments` entity, which has no TIME_FIELD column) with an explicit time_filter
+        # compiled fine as far as this validator was concerned, then crashed with an unhandled
+        # KeyError deep inside SQLCompiler/FieldResolver -- _validate_growth already has this
+        # exact check for GROWTH queries (growth_entity_missing_time_field), but it was never
+        # generalized to plain AGGREGATE/GROUP_BY + time_filter, which hits the same
+        # _apply_time_filter code path via a different metric kind. Mirrors
+        # _validate_group_by_supported/_validate_time_filter_supported's own reasoning: a
+        # gap that "should never happen" until a real dataset's entity shape finds it.
+        if not self.registry.is_registered(metric):
+            return []
+        resolved = self.registry.resolve(metric)
+        kind = getattr(resolved, "kind", None)
+
+        entities: list[str] = []
+        if kind is None:
+            # A bare Measure, always BASE-shaped.
+            entities = [resolved.entity]
+        elif kind == MetricKind.BASE:
+            base = self.registry.resolve(resolved.base_measure)
+            entities = [base.entity]
+        elif kind == MetricKind.RATIO:
+            numerator = self.registry.resolve(resolved.numerator_measure)
+            denominator = self.registry.resolve(resolved.denominator_measure)
+            entities = [numerator.entity, denominator.entity]
+        # HAVING_RATIO is already rejected outright by _validate_time_filter_supported above;
+        # GROWTH can never carry a time_filter at all (AnalyticalQuery's own validator forbids
+        # setting both `time_filter` and `growth`) -- neither needs a check here.
+
+        missing = [
+            e
+            for e in entities
+            if not any(ent.name == e and any(f.name == SQLCompiler.TIME_FIELD for f in ent.fields) for ent in self.semantic_model.entities)
+        ]
+        if missing:
+            return [
+                ValidationError(
+                    code="time_filter_entity_missing_time_field",
+                    message=(
+                        f'metric "{metric}" resolves to entit{"y" if len(missing) == 1 else "ies"} '
+                        f'{missing}, which ha{"s" if len(missing) == 1 else "ve"} no '
+                        f'"{SQLCompiler.TIME_FIELD}" field to filter on'
                     ),
                     field="time_filter",
                 )

@@ -94,13 +94,25 @@ def test_measure_carries_default_aggregation():
     assert revenue.aggregation == AggregationType.SUM
 
 
-def test_metric_result_rejects_both_value_and_rows():
+def test_metric_result_scalar_shape_rejects_rows():
     metadata = QueryMetadata(sql="SELECT 1", execution_time_ms=1.0, row_count=1)
     with pytest.raises(PydanticValidationError):
-        MetricResult(metric_name="revenue", value=100.0, rows=[{"category": "a"}], metadata=metadata)
+        MetricResult(metric_name="revenue", shape="scalar", value=100.0, rows=[{"category": "a"}], metadata=metadata)
 
 
-def test_metric_result_rejects_neither_value_nor_rows():
+def test_metric_result_grouped_shape_rejects_value():
+    metadata = QueryMetadata(sql="SELECT 1", execution_time_ms=1.0, row_count=1)
+    with pytest.raises(PydanticValidationError):
+        MetricResult(metric_name="revenue", shape="grouped", value=100.0, rows=[{"category": "a"}], metadata=metadata)
+
+
+def test_metric_result_grouped_shape_requires_rows():
+    metadata = QueryMetadata(sql="SELECT 1", execution_time_ms=1.0, row_count=1)
+    with pytest.raises(PydanticValidationError):
+        MetricResult(metric_name="revenue", shape="grouped", metadata=metadata)
+
+
+def test_metric_result_missing_shape_is_rejected():
     metadata = QueryMetadata(sql="SELECT 1", execution_time_ms=1.0, row_count=1)
     with pytest.raises(PydanticValidationError):
         MetricResult(metric_name="revenue", metadata=metadata)
@@ -108,6 +120,23 @@ def test_metric_result_rejects_neither_value_nor_rows():
 
 def test_metric_result_scalar_shape():
     metadata = QueryMetadata(sql="SELECT SUM(revenue) FROM orders", execution_time_ms=2.1, row_count=1)
-    result = MetricResult(metric_name="revenue", value=12345.0, metadata=metadata)
+    result = MetricResult(metric_name="revenue", shape="scalar", value=12345.0, metadata=metadata)
     assert result.value == 12345.0
     assert result.rows is None
+
+
+def test_metric_result_scalar_shape_allows_an_undefined_value():
+    # Real finding (poc4_nl_chatbot/tests/test_real_olist_integration.py): a GROWTH query whose
+    # comparison period matches zero rows produces a legitimately-NULL scalar (NULLIF(0, 0)'s
+    # division) -- shape="scalar" with value=None now means exactly that, a real computed but
+    # mathematically-undefined answer, not "malformed/incomplete."
+    metadata = QueryMetadata(sql="SELECT NULL AS value", execution_time_ms=1.0, row_count=1)
+    result = MetricResult(metric_name="order_growth", shape="scalar", value=None, metadata=metadata)
+    assert result.value is None
+    assert result.rows is None
+
+
+def test_metric_result_grouped_shape_allows_an_empty_row_list():
+    metadata = QueryMetadata(sql="SELECT 1", execution_time_ms=1.0, row_count=0)
+    result = MetricResult(metric_name="revenue", shape="grouped", rows=[], metadata=metadata)
+    assert result.rows == []
