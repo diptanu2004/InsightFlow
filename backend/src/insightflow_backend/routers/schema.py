@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
+from insightflow_core.models import SemanticModel
+
 from insightflow_backend.auth.dependencies import get_current_user
 from insightflow_backend.auth.rate_limit import rate_limit_llm
 from insightflow_backend.auth.rbac import require_project_role
@@ -25,7 +27,12 @@ class DatasetOut(BaseModel):
     id: uuid.UUID
     project_id: uuid.UUID
     name: str
-    semantic_model: dict
+    # Typed rather than a bare `dict` (Phase 8 M3): the JSONB column is written from exactly this
+    # model (`jobs.py` stores `SemanticModel.model_dump(mode="json")`), and declaring it here is
+    # what puts Entity/SemanticField/Relationship into the OpenAPI document -- otherwise the
+    # frontend's generated types bottom out at `unknown` for the one payload the semantic-model
+    # viewer exists to render.
+    semantic_model: SemanticModel
     created_at: datetime
 
 
@@ -96,6 +103,29 @@ async def discover_schema(
     enqueue_discovery_job(job.id)
 
     return JobOut(id=job.id, project_id=job.project_id, status=job.status)
+
+
+@router.get("/projects/{project_id}/datasets", response_model=list[DatasetOut], tags=["schema"])
+def list_datasets(
+    project: Project = Depends(require_project_role(Role.VIEWER)),
+    db: Session = Depends(get_db),
+) -> list[DatasetOut]:
+    """A project's datasets, newest first -- so `[0]` is the one query/dashboard/chat actually run
+    against (`dataset_deps.get_latest_dataset` resolves the same row).
+
+    Added in Phase 8 M3: without it the frontend could only ever see a semantic model in the
+    response of the discovery job it just polled, so a page reload left the UI unable to tell
+    whether the project had any data at all. Returns full semantic models rather than a summary
+    plus a detail route -- one upload is one row and a model is a few KB, so the simpler shape
+    covers both "does this project have data" and "show me the current model" in one request.
+    """
+    datasets = (
+        db.query(Dataset)
+        .filter(Dataset.project_id == project.id)
+        .order_by(Dataset.created_at.desc())
+        .all()
+    )
+    return [DatasetOut.model_validate(dataset) for dataset in datasets]
 
 
 @router.get("/projects/{project_id}/schema/jobs/{job_id}", response_model=JobOut, tags=["schema"])
