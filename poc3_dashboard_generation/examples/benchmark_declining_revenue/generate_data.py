@@ -114,7 +114,7 @@ def generate():
 def _write_expected_values(orders, product_category, reference_date):
     """Independent (no engine) computation of every number `tests/test_benchmark_datasets.py`
     checks the real pipeline against -- mirrors SignalGatherer's own 90-day-vs-90-day growth
-    window exactly (see src/insightflow/dashboard/signal.py's `_growth_windows`), since that's the
+    window exactly (see src/insightflow_dashboard/dashboard/signal.py's `_growth_windows`), since that's the
     window the real dashboard run will actually use; everything else (totals, repeat rate,
     category revenue) is a plain aggregate with no engine-specific behavior to mirror."""
 

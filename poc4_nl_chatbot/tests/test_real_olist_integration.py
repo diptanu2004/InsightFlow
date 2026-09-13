@@ -40,15 +40,15 @@ from insightflow_core.pipeline import build_pipeline
 from insightflow_core.registry import MetricRegistry
 from insightflow_core.validation import ASTValidator
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.models.time_expression import TimeExpression
-from insightflow.services.date_bounds import infer_date_bounds
-from insightflow.services.executor import QuestionExecutor
-from insightflow.services.planner_context import build_planner_context
-from insightflow.services.query_assembler import QueryAssembler
-from insightflow.services.result_differ import ResultDiffer
-from insightflow.services.time_resolver import TimeExpressionResolver
-from insightflow.services.validator import QuestionValidator
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.time_expression import TimeExpression
+from insightflow_chatbot.services.date_bounds import infer_date_bounds
+from insightflow_chatbot.services.executor import QuestionExecutor
+from insightflow_chatbot.services.planner_context import build_planner_context
+from insightflow_chatbot.services.query_assembler import QueryAssembler
+from insightflow_chatbot.services.result_differ import ResultDiffer
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.services.validator import QuestionValidator
 
 DATA_DIR = Path(__file__).parent.parent / "examples" / "real_olist_integration" / "data"
 

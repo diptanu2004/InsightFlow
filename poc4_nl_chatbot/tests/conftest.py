@@ -8,10 +8,10 @@ from insightflow_core.models import SemanticModel
 from insightflow_core.pipeline import build_pipeline
 from insightflow_core.validation import ASTValidator
 
-from insightflow.llm.client import LLMClient
-from insightflow.registry.bootstrap import bootstrap_registry
-from insightflow.services.time_resolver import TimeExpressionResolver
-from insightflow.services.validator import QuestionValidator
+from insightflow_chatbot.llm.client import LLMClient
+from insightflow_chatbot.registry.bootstrap import bootstrap_registry
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.services.validator import QuestionValidator
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 

@@ -350,7 +350,27 @@ wheels = [
 ]
 
 [[package]]
-name = "insightflow"
+name = "insightflow-core"
+version = "0.1.0"
+source = { editable = "../insightflow_core" }
+dependencies = [
+    { name = "duckdb" },
+    { name = "pydantic" },
+    { name = "sqlglot" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "duckdb", specifier = ">=1.1" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "sqlglot", specifier = ">=25.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.0" }]
+
+[[package]]
+name = "insightflow-dashboard"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -376,26 +396,6 @@ requires-dist = [
     { name = "langchain-groq", specifier = ">=0.2" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "sqlglot", specifier = ">=25.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=8.0" }]
-
-[[package]]
-name = "insightflow-core"
-version = "0.1.0"
-source = { editable = "../insightflow_core" }
-dependencies = [
-    { name = "duckdb" },
-    { name = "pydantic" },
-    { name = "sqlglot" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "duckdb", specifier = ">=1.1" },
-    { name = "pydantic", specifier = ">=2.7" },
     { name = "sqlglot", specifier = ">=25.0" },
 ]
 

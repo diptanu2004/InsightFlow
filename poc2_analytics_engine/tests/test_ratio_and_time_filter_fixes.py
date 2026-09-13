@@ -6,7 +6,7 @@ exactly why they survived past 45 previously-passing tests.
 1. Cross-entity RATIO used to JOIN numerator_entity to denominator_entity and aggregate both
    sides over that one joined row set (SQLCompiler._compile_ratio). A JOIN drops any row with no
    counterpart on the other side from BOTH aggregates at once. data/'s own "aov" (revenue/orders)
-   never exercised this: bootstrap_registry() (src/insightflow/registry/bootstrap.py) puts both
+   never exercised this: bootstrap_registry() (src/insightflow_analytics/registry/bootstrap.py) puts both
    "revenue" and "orders" on the SAME "orders" entity, so _compile_ratio's same-entity branch
    never even builds a join. The real Olist registry needs revenue on `payments` and orders on
    `orders` -- genuinely different entities -- and the real data has one real "delivered" order
@@ -37,7 +37,7 @@ from insightflow_core.models import (
 )
 from insightflow_core.models.registry import Measure
 from insightflow_core.pipeline import build_pipeline
-from insightflow.registry import MetricRegistry
+from insightflow_analytics.registry import MetricRegistry
 
 
 def _write_csv(path: Path, header: str, rows: list[str]) -> None:

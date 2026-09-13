@@ -2,12 +2,12 @@ from datetime import date
 
 import pytest
 
-from insightflow.dashboard.pipeline import DashboardGenerationPipeline
-from insightflow.dashboard.resolver import DashboardDataResolver
-from insightflow.dashboard.signal import SignalGatherer
-from insightflow.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
-from insightflow.dashboard.validator import DashboardValidator
-from insightflow.dashboard.planner import DashboardPlanner
+from insightflow_dashboard.dashboard.pipeline import DashboardGenerationPipeline
+from insightflow_dashboard.dashboard.resolver import DashboardDataResolver
+from insightflow_dashboard.dashboard.signal import SignalGatherer
+from insightflow_dashboard.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
+from insightflow_dashboard.dashboard.validator import DashboardValidator
+from insightflow_dashboard.dashboard.planner import DashboardPlanner
 
 
 def _build_pipeline(engine, semantic_model, registry, field_resolver, fake_output, make_fake_llm_client):

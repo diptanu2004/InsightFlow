@@ -20,7 +20,7 @@ from insightflow_core.models import (
     TimeFilter,
 )
 from insightflow_core.pipeline import build_pipeline
-from insightflow.registry import bootstrap_registry
+from insightflow_analytics.registry import bootstrap_registry
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 

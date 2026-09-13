@@ -15,10 +15,10 @@ import argparse
 import json
 from pathlib import Path
 
-from insightflow.dashboard.pipeline import build_dashboard_pipeline
-from insightflow.llm.groq_client import GroqLLMClient
+from insightflow_dashboard.dashboard.pipeline import build_dashboard_pipeline
+from insightflow_dashboard.llm.groq_client import GroqLLMClient
 from insightflow_core.models import SemanticModel
-from insightflow.registry import bootstrap_registry
+from insightflow_dashboard.registry import bootstrap_registry
 
 
 def main() -> None:

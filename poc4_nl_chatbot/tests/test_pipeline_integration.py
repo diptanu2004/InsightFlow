@@ -5,16 +5,16 @@ import pytest
 from insightflow_core.compilation import FieldResolver
 from insightflow_core.validation import ASTValidator
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.models.time_expression import TimeExpression
-from insightflow.pipeline import QuestionAnsweringPipeline
-from insightflow.services.executor import QuestionExecutor
-from insightflow.services.insight import _ExplanationOutput
-from insightflow.services.planner import QuestionPlanner
-from insightflow.services.query_assembler import QueryAssembler
-from insightflow.services.result_differ import ResultDiffer
-from insightflow.services.time_resolver import TimeExpressionResolver
-from insightflow.services.validator import QuestionValidator
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.time_expression import TimeExpression
+from insightflow_chatbot.pipeline import QuestionAnsweringPipeline
+from insightflow_chatbot.services.executor import QuestionExecutor
+from insightflow_chatbot.services.insight import _ExplanationOutput
+from insightflow_chatbot.services.planner import QuestionPlanner
+from insightflow_chatbot.services.query_assembler import QueryAssembler
+from insightflow_chatbot.services.result_differ import ResultDiffer
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.services.validator import QuestionValidator
 
 # Same real date range as test_question_executor_integration.py's sample dataset.
 REFERENCE_DATE = date(2026, 2, 15)
@@ -22,7 +22,7 @@ MIN_DATE = date(2025, 11, 1)
 
 
 def _build_pipeline(semantic_model, registry, engine, planner_llm, insight_llm):
-    from insightflow.services.insight import InsightGenerator
+    from insightflow_chatbot.services.insight import InsightGenerator
 
     time_resolver = TimeExpressionResolver(reference_date=REFERENCE_DATE, min_date=MIN_DATE)
     return QuestionAnsweringPipeline(

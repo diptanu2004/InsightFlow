@@ -18,3 +18,6 @@ build/
 # Large raw datasets (fetch separately; too large for git)
 Brazillian_Ecom_dataset/
 poc2_analytics_engine/examples/real_olist_full_scale/data/raw/
+
+# Phase 5 backend: per-upload dataset dirs written at runtime by POST /schema/discover
+backend/.uploads/

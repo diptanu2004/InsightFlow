@@ -1,6 +1,6 @@
 from insightflow_core.models import MetricResult, QueryMetadata
 
-from insightflow.services.result_differ import ResultDiffer
+from insightflow_chatbot.services.result_differ import ResultDiffer
 
 
 def _grouped_result(rows: list[dict]) -> MetricResult:

@@ -1,6 +1,6 @@
 from datetime import date
 
-from insightflow.dashboard.signal import SignalGatherer
+from insightflow_dashboard.dashboard.signal import SignalGatherer
 
 
 def _by_name(signals):

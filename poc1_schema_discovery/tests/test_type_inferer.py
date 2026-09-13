@@ -1,5 +1,5 @@
-from insightflow.inference.type_inferer import TypeInferer
-from insightflow.models.column_profile import ColumnProfile
+from insightflow_schema_discovery.inference.type_inferer import TypeInferer
+from insightflow_schema_discovery.models.column_profile import ColumnProfile
 
 
 def _profile(**overrides) -> ColumnProfile:

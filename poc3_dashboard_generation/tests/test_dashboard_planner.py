@@ -1,7 +1,7 @@
-from insightflow.dashboard.planner import DashboardPlanner
-from insightflow.dashboard.planner_context import MetricSummary, PlannerContext
-from insightflow.dashboard.signal import SignalResult
-from insightflow.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
+from insightflow_dashboard.dashboard.planner import DashboardPlanner
+from insightflow_dashboard.dashboard.planner_context import MetricSummary, PlannerContext
+from insightflow_dashboard.dashboard.signal import SignalResult
+from insightflow_dashboard.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
 from insightflow_core.models import MetricResult, QueryMetadata
 
 

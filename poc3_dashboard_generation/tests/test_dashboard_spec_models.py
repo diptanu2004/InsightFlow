@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from insightflow.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec, FilterSpec
+from insightflow_dashboard.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec, FilterSpec
 
 
 def test_kpi_component_needs_no_dimension():

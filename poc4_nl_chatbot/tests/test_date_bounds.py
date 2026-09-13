@@ -1,6 +1,6 @@
 from datetime import date
 
-from insightflow.services.date_bounds import infer_date_bounds
+from insightflow_chatbot.services.date_bounds import infer_date_bounds
 
 
 def test_infer_date_bounds_matches_sample_dataset(semantic_model):

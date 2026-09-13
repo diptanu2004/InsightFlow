@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from insightflow.services.fixtures import load_fixtures
+from insightflow_chatbot.services.fixtures import load_fixtures
 
 BENCHMARK_PATH = Path(__file__).parent.parent / "data" / "refusal_benchmark.json"
 

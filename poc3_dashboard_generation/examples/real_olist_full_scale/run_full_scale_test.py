@@ -36,18 +36,18 @@ from datetime import date
 from pathlib import Path
 
 from insightflow_core.compilation import FieldResolver, SQLCompiler
-from insightflow.dashboard.pipeline import DashboardGenerationPipeline
-from insightflow.dashboard.planner import DashboardPlanner
-from insightflow.dashboard.resolver import DashboardDataResolver
-from insightflow.dashboard.signal import SignalGatherer
-from insightflow.dashboard.spec import GROUPING_COMPONENT_TYPES
-from insightflow.dashboard.validator import DashboardValidator
+from insightflow_dashboard.dashboard.pipeline import DashboardGenerationPipeline
+from insightflow_dashboard.dashboard.planner import DashboardPlanner
+from insightflow_dashboard.dashboard.resolver import DashboardDataResolver
+from insightflow_dashboard.dashboard.signal import SignalGatherer
+from insightflow_dashboard.dashboard.spec import GROUPING_COMPONENT_TYPES
+from insightflow_dashboard.dashboard.validator import DashboardValidator
 from insightflow_core.execution import QueryExecutor
-from insightflow.llm.groq_client import GroqLLMClient
+from insightflow_dashboard.llm.groq_client import GroqLLMClient
 from insightflow_core.models import AggregationType, HavingClause, MetricDefinition, MetricKind, SemanticModel
 from insightflow_core.models.registry import Measure
 from insightflow_core.pipeline import AnalyticsEnginePipeline
-from insightflow.registry import MetricRegistry
+from insightflow_dashboard.registry import MetricRegistry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
 
@@ -132,7 +132,7 @@ def main():
     args = parser.parse_args()
     data_dir = args.data_dir
 
-    from insightflow.config import settings
+    from insightflow_dashboard.config import settings
 
     semantic_model = SemanticModel(**json.loads((data_dir / "semantic_model.json").read_text()))
     registry = bootstrap_real_business_registry()

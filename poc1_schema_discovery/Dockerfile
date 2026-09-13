@@ -1,6 +1,6 @@
 # InsightFlow — POC 1 image.
-# Today this runs the schema-discovery CLI; once the FastAPI layer exists,
-# only the final CMD needs to change to `uvicorn insightflow.api:app --host 0.0.0.0 --port 8000`.
+# Today this runs the schema-discovery CLI. The Phase 5 FastAPI layer now lives in the
+# top-level backend/ package (it imports this POC as insightflow-schema-discovery), not here.
 
 FROM python:3.11-slim
 

@@ -23,11 +23,11 @@ from groq import RateLimitError
 from insightflow_core.models import SemanticModel
 from insightflow_core.pipeline import build_pipeline
 
-from insightflow.llm.groq_client import GroqLLMClient
-from insightflow.pipeline import build_question_answering_pipeline
-from insightflow.registry import bootstrap_registry
-from insightflow.services.evaluator import AnswerEvaluator
-from insightflow.services.fixtures import load_fixtures
+from insightflow_chatbot.llm.groq_client import GroqLLMClient
+from insightflow_chatbot.pipeline import build_question_answering_pipeline
+from insightflow_chatbot.registry import bootstrap_registry
+from insightflow_chatbot.services.evaluator import AnswerEvaluator
+from insightflow_chatbot.services.fixtures import load_fixtures
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 

@@ -18,16 +18,16 @@ from datetime import date
 from pathlib import Path
 
 from insightflow_core.compilation import FieldResolver, SQLCompiler
-from insightflow.dashboard.pipeline import DashboardGenerationPipeline
-from insightflow.dashboard.planner import DashboardPlanner
-from insightflow.dashboard.resolver import DashboardDataResolver
-from insightflow.dashboard.signal import SignalGatherer
-from insightflow.dashboard.validator import DashboardValidator
+from insightflow_dashboard.dashboard.pipeline import DashboardGenerationPipeline
+from insightflow_dashboard.dashboard.planner import DashboardPlanner
+from insightflow_dashboard.dashboard.resolver import DashboardDataResolver
+from insightflow_dashboard.dashboard.signal import SignalGatherer
+from insightflow_dashboard.dashboard.validator import DashboardValidator
 from insightflow_core.execution import QueryExecutor
-from insightflow.llm.groq_client import GroqLLMClient
+from insightflow_dashboard.llm.groq_client import GroqLLMClient
 from insightflow_core.models import SemanticModel
 from insightflow_core.pipeline import AnalyticsEnginePipeline
-from insightflow.registry import bootstrap_registry
+from insightflow_dashboard.registry import bootstrap_registry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
 
@@ -35,7 +35,7 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 
 
 def main():
-    from insightflow.config import settings
+    from insightflow_dashboard.config import settings
 
     semantic_model = SemanticModel(**json.loads((DATA_DIR / "semantic_model.json").read_text()))
     expected = json.loads((DATA_DIR / "expected_values.json").read_text())

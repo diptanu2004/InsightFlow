@@ -2,12 +2,12 @@ from datetime import date
 
 import pytest
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.models.time_expression import TimeExpression
-from insightflow.services.executor import QuestionExecutor
-from insightflow.services.query_assembler import QueryAssembler
-from insightflow.services.result_differ import ResultDiffer
-from insightflow.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.time_expression import TimeExpression
+from insightflow_chatbot.services.executor import QuestionExecutor
+from insightflow_chatbot.services.query_assembler import QueryAssembler
+from insightflow_chatbot.services.result_differ import ResultDiffer
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
 
 # Sample dataset's real date range: 2025-11-01 (O5) to 2026-02-15 (O4) -- see data/raw/sample/orders.csv.
 REFERENCE_DATE = date(2026, 2, 15)

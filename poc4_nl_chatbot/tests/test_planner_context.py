@@ -1,6 +1,6 @@
 from insightflow_core.compilation import FieldResolver
 
-from insightflow.services.planner_context import build_planner_context
+from insightflow_chatbot.services.planner_context import build_planner_context
 
 
 def test_context_lists_all_entities(semantic_model, registry):

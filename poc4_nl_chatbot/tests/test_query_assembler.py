@@ -4,10 +4,10 @@ import pytest
 
 from insightflow_core.models import OperationType
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.models.time_expression import TimeExpression
-from insightflow.services.query_assembler import QueryAssembler
-from insightflow.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.time_expression import TimeExpression
+from insightflow_chatbot.services.query_assembler import QueryAssembler
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
 
 
 @pytest.fixture

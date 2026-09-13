@@ -1,7 +1,6 @@
 # InsightFlow — POC 3 image.
-# Today this runs the dashboard-generation CLI; once the FastAPI layer exists, only the final
-# CMD needs to change to `uvicorn insightflow.api:app --host 0.0.0.0 --port 8000` (same note
-# poc2_analytics_engine/Dockerfile carries).
+# Today this runs the dashboard-generation CLI. The Phase 5 FastAPI layer now lives in the
+# top-level backend/ package (it imports this POC as insightflow-dashboard), not here.
 #
 # BUILD CONTEXT CHANGED: this now builds from the top-level InsightFlow/ directory, not from
 # poc3_dashboard_generation/ itself -- same reason as poc2_analytics_engine/Dockerfile's own note

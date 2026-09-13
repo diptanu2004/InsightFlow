@@ -1,5 +1,5 @@
-from insightflow.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
-from insightflow.dashboard.validator import DashboardValidator
+from insightflow_dashboard.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
+from insightflow_dashboard.dashboard.validator import DashboardValidator
 
 
 def _validator(registry, field_resolver, min_c=3, max_c=8):
@@ -152,7 +152,7 @@ def test_too_many_components_is_rejected(registry, field_resolver):
 
 
 def test_unknown_filter_dimension_is_rejected(registry, field_resolver):
-    from insightflow.dashboard.spec import FilterSpec
+    from insightflow_dashboard.dashboard.spec import FilterSpec
 
     v = _validator(registry, field_resolver, min_c=1, max_c=8)
     spec = DashboardSpec(

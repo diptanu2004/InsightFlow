@@ -1,7 +1,7 @@
 from insightflow_core.models import MetricResult, QueryMetadata
 
-from insightflow.models.result import CategoryDelta, QuestionResult
-from insightflow.services.insight import InsightGenerator, _ExplanationOutput
+from insightflow_chatbot.models.result import CategoryDelta, QuestionResult
+from insightflow_chatbot.services.insight import InsightGenerator, _ExplanationOutput
 
 
 def _metadata():

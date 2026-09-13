@@ -1,7 +1,6 @@
 # InsightFlow — POC 4 image.
-# Today this runs the NL-chatbot CLI; once the FastAPI layer exists, only the final CMD needs to
-# change to `uvicorn insightflow.api:app --host 0.0.0.0 --port 8000` (same note
-# poc2_analytics_engine/Dockerfile and poc3_dashboard_generation/Dockerfile carry).
+# Today this runs the NL-chatbot CLI. The Phase 5 FastAPI layer now lives in the
+# top-level backend/ package (it imports this POC as insightflow-chatbot), not here.
 #
 # BUILD CONTEXT: builds from the top-level InsightFlow/ directory, not from poc4_nl_chatbot/
 # itself -- same reason as poc2/poc3's Dockerfiles (pyproject.toml depends on the sibling

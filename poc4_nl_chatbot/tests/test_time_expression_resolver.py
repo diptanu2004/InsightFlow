@@ -2,8 +2,8 @@ from datetime import date
 
 import pytest
 
-from insightflow.models.time_expression import TimeExpression
-from insightflow.services.time_resolver import TimeExpressionResolver
+from insightflow_chatbot.models.time_expression import TimeExpression
+from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
 
 
 @pytest.fixture

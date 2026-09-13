@@ -5,10 +5,10 @@ import pytest
 
 from insightflow_core.compilation import FieldResolver, SQLCompiler
 from insightflow_core.execution import QueryExecutor
-from insightflow.llm.client import LLMClient
+from insightflow_dashboard.llm.client import LLMClient
 from insightflow_core.models import SemanticModel
 from insightflow_core.pipeline import AnalyticsEnginePipeline
-from insightflow.registry import bootstrap_registry
+from insightflow_dashboard.registry import bootstrap_registry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
 

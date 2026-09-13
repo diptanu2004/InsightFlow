@@ -20,7 +20,7 @@ from insightflow_core.models import (
 )
 from insightflow_core.models.registry import Measure
 from insightflow_core.pipeline import build_pipeline
-from insightflow.registry import MetricRegistry
+from insightflow_analytics.registry import MetricRegistry
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 

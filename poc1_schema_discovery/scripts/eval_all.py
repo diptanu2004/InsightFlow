@@ -15,9 +15,9 @@ import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from insightflow.evaluation.evaluator import Evaluator
-from insightflow.evaluation.ground_truth import GroundTruth
-from insightflow.pipeline import SchemaDiscoveryPipeline
+from insightflow_schema_discovery.evaluation.evaluator import Evaluator
+from insightflow_schema_discovery.evaluation.ground_truth import GroundTruth
+from insightflow_schema_discovery.pipeline import SchemaDiscoveryPipeline
 
 
 @dataclass

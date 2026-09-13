@@ -1,0 +1,38 @@
+[project]
+name = "insightflow-backend"
+version = "0.1.0"
+description = "InsightFlow Phase 5 -- single FastAPI app wiring all 4 POC pipelines behind HTTP routes"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "insightflow-core",
+    "insightflow-schema-discovery",
+    "insightflow-dashboard",
+    "insightflow-chatbot",
+]
+
+[tool.uv.sources]
+# Local, editable, path-based -- NOT a uv workspace, same rationale every POC's own
+# pyproject.toml already documents for insightflow-core: keeps this package's venv independent
+# rather than merging 5 lockfiles into one.
+insightflow-core = { path = "../insightflow_core", editable = true }
+insightflow-schema-discovery = { path = "../poc1_schema_discovery", editable = true }
+insightflow-dashboard = { path = "../poc3_dashboard_generation", editable = true }
+insightflow-chatbot = { path = "../poc4_nl_chatbot", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/insightflow_backend"]

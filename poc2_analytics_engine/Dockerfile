@@ -1,6 +1,6 @@
 # InsightFlow — POC 2 image.
-# Today this runs the analytics-engine CLI; once the FastAPI layer exists,
-# only the final CMD needs to change to `uvicorn insightflow.api:app --host 0.0.0.0 --port 8000`.
+# Today this runs the analytics-engine CLI. The Phase 5 FastAPI layer now lives in the
+# top-level backend/ package (it imports this POC as insightflow-analytics), not here.
 #
 # BUILD CONTEXT CHANGED: this now builds from the top-level InsightFlow/ directory, not from
 # poc2_analytics_engine/ itself -- since pyproject.toml depends on the sibling insightflow-core

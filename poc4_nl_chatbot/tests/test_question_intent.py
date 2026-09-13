@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.models.time_expression import TimeExpression
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.time_expression import TimeExpression
 
 
 def test_unanswerable_requires_a_reason():

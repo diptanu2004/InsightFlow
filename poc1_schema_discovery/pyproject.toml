@@ -1,5 +1,5 @@
 [project]
-name = "insightflow"
+name = "insightflow-schema-discovery"
 version = "0.1.0"
 description = "InsightFlow POC 1 - Schema Discovery + Relationship Detection"
 requires-python = ">=3.11"
@@ -20,4 +20,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/insightflow"]
+packages = ["src/insightflow_schema_discovery"]

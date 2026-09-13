@@ -19,11 +19,11 @@ import argparse
 import json
 from pathlib import Path
 
-from insightflow.config import settings
-from insightflow.evaluation import Evaluator, MetricFixture
+from insightflow_analytics.config import settings
+from insightflow_analytics.evaluation import Evaluator, MetricFixture
 from insightflow_core.models import AnalyticalQuery, SemanticModel
 from insightflow_core.pipeline import build_pipeline
-from insightflow.registry import bootstrap_registry
+from insightflow_analytics.registry import bootstrap_registry
 
 
 def main() -> None:

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from insightflow.profiling.data_profiler import DataProfiler
+from insightflow_schema_discovery.profiling.data_profiler import DataProfiler
 
 
 def test_profiles_id_like_column():

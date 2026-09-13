@@ -1,5 +1,5 @@
-from insightflow.dashboard.resolver import DashboardDataResolver
-from insightflow.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
+from insightflow_dashboard.dashboard.resolver import DashboardDataResolver
+from insightflow_dashboard.dashboard.spec import ComponentSpec, ComponentType, DashboardSpec
 from insightflow_core.models import OperationType
 
 

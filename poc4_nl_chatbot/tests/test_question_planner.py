@@ -1,8 +1,8 @@
 from insightflow_core.compilation import FieldResolver
 
-from insightflow.models.intent import QuestionIntent, QuestionOperation
-from insightflow.services.planner import QuestionPlanner
-from insightflow.services.planner_context import build_planner_context
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.services.planner import QuestionPlanner
+from insightflow_chatbot.services.planner_context import build_planner_context
 
 
 def test_planner_returns_the_fake_llms_structured_intent(semantic_model, registry, make_fake_llm_client):

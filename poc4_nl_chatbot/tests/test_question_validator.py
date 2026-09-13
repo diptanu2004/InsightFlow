@@ -1,7 +1,7 @@
 from insightflow_core.models import AnalyticalQuery, OperationType
 
-from insightflow.models.resolved import ResolvedQuery
-from insightflow.models.intent import QuestionIntent, QuestionOperation
+from insightflow_chatbot.models.resolved import ResolvedQuery
+from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
 
 
 def _resolved(query: AnalyticalQuery, *, operation=QuestionOperation.AGGREGATE, **intent_kwargs) -> ResolvedQuery:
