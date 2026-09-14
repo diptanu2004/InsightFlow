@@ -216,3 +216,24 @@ def test_hinted_ratio_sides_may_bind_to_different_entities():
     # docstring records as a real Olist case -- compiled as two independent subqueries.
     assert bound["numerator"].entity == PAYMENTS
     assert bound["denominator"].entity == ORDERS
+
+
+def test_results_carry_the_registrys_display_format(tmp_path):
+    """Phase 8 M4: a renderer can't tell a share (0.5) from an amount (790) by name alone."""
+    (tmp_path / f"{PAYMENTS}.csv").write_text("order_id,payment_value\nA,100\n")
+    (tmp_path / f"{ITEMS}.csv").write_text("order_id,product_id,price\nA,p1,60\n")
+    (tmp_path / f"{PRODUCTS}.csv").write_text("product_id,product_category_name\np1,toys\n")
+    (tmp_path / f"{CUSTOMERS}.csv").write_text("customer_id,customer_state\nc1,SP\n")
+    registry = MetricRegistry()
+    registry.register_measure(Measure(name="revenue", source_field="revenue", aggregation=AggregationType.SUM, format="money"))
+    model = _olist_model()
+    executor = QueryExecutor(":memory:", 10, 1000)
+    executor.register_sources(model, str(tmp_path))
+    engine = AnalyticsEnginePipeline(
+        registry=registry,
+        validator=ASTValidator(registry, model, 1000),
+        compiler=SQLCompiler(registry, FieldResolver(model), 1000),
+        checker=SQLSafetyChecker(model, 1000),
+        executor=executor,
+    )
+    assert engine.run(AnalyticalQuery(operation=OperationType.AGGREGATE, metric="revenue")).format == "money"

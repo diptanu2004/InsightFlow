@@ -16,7 +16,12 @@ exactly "the compiler will find everything it looks up", with no second opinion 
 measure reads.
 """
 from insightflow_core.compilation.field_resolver import FieldResolver
-from insightflow_core.compilation.measure_binding import UnresolvableMeasure, bind_metric
+from insightflow_core.compilation.measure_binding import (
+    UnresolvableMeasure,
+    UnresolvableTimeField,
+    bind_metric,
+    resolve_time_entity,
+)
 from insightflow_core.compilation.sql_compiler import SQLCompiler
 from insightflow_core.models.registry import Measure, MetricKind
 from insightflow_core.models.semantic_model import Entity, SemanticModel
@@ -44,12 +49,10 @@ def unresolvable_reason(name: str, registry: MetricRegistry, semantic_model: Sem
         return None
 
     if resolved.kind == MetricKind.GROWTH:
-        entity = _find_entity(semantic_model, bound["base"].entity)
-        if not any(field.name == SQLCompiler.TIME_FIELD for field in entity.fields):
-            return (
-                f'metric "{name}" compares periods on "{SQLCompiler.TIME_FIELD}", which entity '
-                f'"{entity.name}" does not have'
-            )
+        try:
+            resolve_time_entity(bound["base"].entity, SQLCompiler.TIME_FIELD, semantic_model)
+        except UnresolvableTimeField as exc:
+            return f'metric "{name}" can\'t compare periods: {exc}'
         return None
 
     # HAVING_RATIO -- mirrors SQLCompiler._compile_having_ratio's lookups step by step.

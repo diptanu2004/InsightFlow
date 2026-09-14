@@ -3,7 +3,7 @@ structure" section. MetricRegistry itself (the store with register()/resolve() m
 insightflow_core.registry.metric_registry, not here — this module is just the data classes it holds.
 """
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -17,6 +17,12 @@ class AggregationType(str, Enum):
     AVG = "avg"
     MIN = "min"
     MAX = "max"
+
+
+# How a metric's value should be displayed -- business config, set in the registry next to the
+# definition. "money" is deliberately symbol-less: nothing in an upload says which currency it's in
+# (the Kaggle Olist data is Brazilian reais), so a renderer must not invent "$".
+MetricFormat = Literal["money", "count", "percent", "number"]
 
 
 class Measure(BaseModel):
@@ -42,6 +48,7 @@ class Measure(BaseModel):
     # file". `colocate_with_field="order_id"` says the former. It narrows, never widens -- if no
     # candidate entity carries this field, the measure stays ambiguous and is refused.
     colocate_with_field: Optional[str] = None
+    format: MetricFormat = "number"
 
 
 class MetricKind(str, Enum):
@@ -92,6 +99,7 @@ class MetricDefinition(BaseModel):
     group_by_entity: Optional[str] = None
     group_by_source_column: Optional[str] = None
     description: str = ""
+    format: MetricFormat = "number"
 
     @model_validator(mode="after")
     def _required_fields_for_kind(self) -> "MetricDefinition":

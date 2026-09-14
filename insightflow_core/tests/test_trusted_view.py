@@ -101,3 +101,50 @@ def test_trusted_does_not_mutate_the_model_it_was_called_on():
     model = _real_upload()
     model.trusted()
     assert sum(len(e.fields) for e in model.entities) == 8
+
+
+def test_a_join_through_a_column_whose_mapping_was_rejected_still_passes_the_safety_check(tmp_path):
+    """Phase 8 M5: a correct review rejected customers.customer_id as "the customer" (it's per-order;
+    the person is customer_unique_id). The orders -> customers foreign key still joins on that
+    physical column, and the safety checker refused every "by region" query until relationship join
+    columns were allowlisted alongside trusted fields."""
+    from insightflow_core.compilation import FieldResolver, SQLCompiler
+    from insightflow_core.execution import QueryExecutor
+    from insightflow_core.models import AnalyticalQuery, OperationType
+    from insightflow_core.pipeline import AnalyticsEnginePipeline
+    from insightflow_core.safety import SQLSafetyChecker
+    from insightflow_core.validation import ASTValidator
+
+    (tmp_path / f"{ORDERS}.csv").write_text("order_id,customer_id\no1,c1\no2,c2\no3,c1\n")
+    (tmp_path / f"{CUSTOMERS}.csv").write_text("customer_id,customer_unique_id,customer_city\nc1,p1,sao paulo\nc2,p2,rio\n")
+    model = SemanticModel(
+        entities=[
+            Entity(name=ORDERS, fields=[_field("order_id", "order_id", ORDERS), _field("customer_id", "customer_id", ORDERS)]),
+            Entity(
+                name=CUSTOMERS,
+                fields=[
+                    _field("customer_id", "customer_id", CUSTOMERS, status="rejected"),
+                    _field("customer_id", "customer_unique_id", CUSTOMERS, 0.95, "confirmed"),
+                    _field("region", "customer_city", CUSTOMERS, 0.85, "confirmed"),
+                ],
+            ),
+        ],
+        relationships=[Relationship(from_field=f"{ORDERS}.customer_id", to_field=f"{CUSTOMERS}.customer_id", confidence=1.0, direction="x")],
+    ).trusted()
+    registry = MetricRegistry()
+    registry.register_measure(
+        Measure(name="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT, colocate_with_field="customer_id")
+    )
+    executor = QueryExecutor(":memory:", 10, 1000)
+    executor.register_sources(model, str(tmp_path))
+    engine = AnalyticsEnginePipeline(
+        registry=registry,
+        validator=ASTValidator(registry, model, 1000),
+        compiler=SQLCompiler(registry, FieldResolver(model), 1000),
+        checker=SQLSafetyChecker(model, 1000),
+        executor=executor,
+    )
+
+    result = engine.run(AnalyticalQuery(operation=OperationType.GROUP_BY, metric="orders", dimension="region"))
+
+    assert {row["region"]: row["value"] for row in result.rows} == {"sao paulo": 2, "rio": 1}

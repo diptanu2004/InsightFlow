@@ -1,5 +1,10 @@
 from insightflow_core.compilation.field_resolver import FieldResolver
-from insightflow_core.compilation.measure_binding import UnresolvableMeasure, bind_metric
+from insightflow_core.compilation.measure_binding import (
+    UnresolvableMeasure,
+    UnresolvableTimeField,
+    bind_metric,
+    resolve_time_entity,
+)
 from insightflow_core.compilation.sql_compiler import SQLCompiler
 from insightflow_core.models import AnalyticalQuery, OperationType, TimeFilter, ValidationError, ValidationResult
 from insightflow_core.models.query import HavingClause
@@ -196,20 +201,19 @@ class ASTValidator:
         except UnresolvableMeasure:
             return []  # already reported by _validate_metric as unresolvable_metric
 
-        missing = [
-            e
-            for e in entities
-            if not any(ent.name == e and any(f.name == SQLCompiler.TIME_FIELD for f in ent.fields) for ent in self.semantic_model.entities)
-        ]
-        if missing:
+        # The same resolution the compiler uses: the entity's own time field, or the one directly
+        # related entity's (filtered through a semi-join).
+        problems = []
+        for entity in dict.fromkeys(entities):
+            try:
+                resolve_time_entity(entity, SQLCompiler.TIME_FIELD, self.semantic_model)
+            except UnresolvableTimeField as exc:
+                problems.append(str(exc))
+        if problems:
             return [
                 ValidationError(
                     code="time_filter_entity_missing_time_field",
-                    message=(
-                        f'metric "{metric}" resolves to entit{"y" if len(missing) == 1 else "ies"} '
-                        f'{missing}, which ha{"s" if len(missing) == 1 else "ve"} no '
-                        f'"{SQLCompiler.TIME_FIELD}" field to filter on'
-                    ),
+                    message=f'metric "{metric}" can\'t be time-filtered: {"; ".join(problems)}',
                     field="time_filter",
                 )
             ]
@@ -259,20 +263,13 @@ class ASTValidator:
             except UnresolvableMeasure:
                 bound = {}  # already reported by _validate_metric as unresolvable_metric
             if "base" in bound:
-                entity_name = bound["base"].entity
-                has_time_field = any(
-                    e.name == entity_name and any(f.name == SQLCompiler.TIME_FIELD for f in e.fields)
-                    for e in self.semantic_model.entities
-                )
-                if entity_name is not None and not has_time_field:
+                try:
+                    resolve_time_entity(bound["base"].entity, SQLCompiler.TIME_FIELD, self.semantic_model)
+                except UnresolvableTimeField as exc:
                     errors.append(
                         ValidationError(
                             code="growth_entity_missing_time_field",
-                            message=(
-                                f'metric "{query.metric}"\'s base measure lives on entity '
-                                f'"{entity_name}", which has no "{SQLCompiler.TIME_FIELD}" field '
-                                "to filter growth periods on"
-                            ),
+                            message=f'metric "{query.metric}" can\'t compare periods: {exc}',
                             field="growth",
                         )
                     )

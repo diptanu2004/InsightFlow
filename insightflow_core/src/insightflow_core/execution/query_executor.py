@@ -71,9 +71,22 @@ class QueryExecutor:
             value = None
             if rows and rows[0].get("value") is not None:
                 value = float(rows[0]["value"])
-            return MetricResult(metric_name=metric_name, shape="scalar", value=value, metadata=metadata)
+            caveats = [
+                rule.message
+                for rule in compiled.caveat_rules
+                if rows and rows[0].get(rule.column) is not None and float(rows[0][rule.column]) <= rule.at_most
+            ]
+            return MetricResult(metric_name=metric_name, shape="scalar", value=value, metadata=metadata, caveats=caveats)
 
-        return MetricResult(metric_name=metric_name, shape="grouped", rows=rows, metadata=metadata)
+        return MetricResult(
+            metric_name=metric_name,
+            shape="grouped",
+            rows=rows,
+            metadata=metadata,
+            # Filling the limit exactly may also mean "exactly that many groups exist" -- callers treat
+            # it as "may be incomplete", which is the only safe reading.
+            truncated=compiled.row_limit > 0 and len(rows) >= compiled.row_limit,
+        )
 
     def _run_with_timeout(self, sql: str, params: dict) -> list[dict]:
         # DuckDB's Python API has no first-class per-query wall-clock timeout that's portable

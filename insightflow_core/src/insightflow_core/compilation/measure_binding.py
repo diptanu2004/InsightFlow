@@ -28,6 +28,7 @@ The ambiguity rule is deliberately strict, and deterministic -- no LLM is ever i
 """
 from dataclasses import dataclass
 
+from insightflow_core.compilation.field_resolver import FieldResolver
 from insightflow_core.models.registry import Measure, MetricDefinition, MetricKind
 from insightflow_core.models.semantic_model import SemanticModel
 from insightflow_core.registry import MetricRegistry
@@ -132,6 +133,46 @@ def bind_measure_pair(a: Measure, b: Measure, semantic_model: SemanticModel) -> 
     if len(a_candidates) > 1:
         raise _ambiguous(a, a_candidates, sibling=b)
     raise _ambiguous(b, b_candidates, sibling=a)
+
+
+class UnresolvableTimeField(ValueError):
+    """No single entity can supply the time field a measure needs to be filtered on. A ValueError
+    for the same reason as UnresolvableMeasure: existing boundaries report it cleanly."""
+
+
+def resolve_time_entity(entity: str, time_field: str, semantic_model: SemanticModel) -> str:
+    """Which entity supplies `time_field` for filtering rows of `entity`.
+
+    The entity itself if it carries the field. Otherwise the one entity that does and is reachable
+    over a single-hop relationship -- the compiler then filters with a semi-join through that
+    relationship. Found on a real Olist upload: revenue lives on payments and the purchase date on
+    the orders header, one join away, so "revenue last quarter" and revenue_growth were refused
+    outright. Facts and dates sit in different tables on any normalized schema.
+
+    Same no-guessing rule as measure binding: more than one reachable dated entity is refused, as is
+    anything only reachable over more hops (multi-hop joins are unsupported, see FieldResolver).
+    """
+    def has_time_field(name: str) -> bool:
+        return any(e.name == name and any(f.name == time_field for f in e.fields) for e in semantic_model.entities)
+
+    if has_time_field(entity):
+        return entity
+    resolver = FieldResolver(semantic_model)
+    reachable = [
+        e.name
+        for e in semantic_model.entities
+        if e.name != entity and has_time_field(e.name) and resolver.resolve_join_path(entity, e.name) is not None
+    ]
+    if not reachable:
+        raise UnresolvableTimeField(
+            f'entity "{entity}" has no "{time_field}" field, and no directly related entity has one to filter it by'
+        )
+    if len(reachable) > 1:
+        raise UnresolvableTimeField(
+            f'entity "{entity}" has no "{time_field}" field, and more than one directly related entity has one '
+            f"({', '.join(reachable)}), so which date applies is ambiguous"
+        )
+    return reachable[0]
 
 
 def _registered_measure(name: str, registry: MetricRegistry) -> Measure:

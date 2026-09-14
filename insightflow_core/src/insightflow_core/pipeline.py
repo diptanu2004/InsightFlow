@@ -43,7 +43,9 @@ class AnalyticsEnginePipeline:
         if not check.is_safe:
             raise ValueError(f"compiled SQL failed safety check: {check.violations}")
 
-        return self.executor.execute(compiled, query.metric)
+        result = self.executor.execute(compiled, query.metric)
+        result.format = self.registry.resolve(query.metric).format
+        return result
 
 
 def build_pipeline(

@@ -1,6 +1,6 @@
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class QueryMetadata(BaseModel):
@@ -30,6 +30,18 @@ class MetricResult(BaseModel):
     value: Optional[float] = None
     rows: Optional[list[dict[str, Any]]] = None
     metadata: QueryMetadata
+    # Why this correct number may not mean what it appears to, stated by the engine itself (see
+    # CaveatRule). Found on real Olist: repeat_purchase_rate was exactly 0 because every customer_id
+    # there appears on one order, and a dashboard narrative turned that into a business conclusion.
+    # LLM layers must not draw conclusions from a result that carries caveats.
+    caveats: list[str] = Field(default_factory=list)
+    # The registry's display format for this metric, stamped by AnalyticsEnginePipeline.run -- so a
+    # renderer never has to guess whether 0.5 is a share or 790 an amount from the metric's name.
+    format: Literal["money", "count", "percent", "number"] = "number"
+    # A grouped result that filled its row limit and may have more groups than it returned. Anything
+    # that treats `rows` as the complete set -- a share of the whole, a zero-filled comparison between
+    # two periods -- must not, or it invents numbers for the groups that were cut.
+    truncated: bool = False
 
     @model_validator(mode="after")
     def _fields_match_declared_shape(self) -> "MetricResult":

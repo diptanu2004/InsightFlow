@@ -24,6 +24,18 @@ class SQLSafetyChecker:
         self.allowed_columns: dict[str, set[str]] = {
             e.name: {f.source_column for f in e.fields} for e in semantic_model.entities
         }
+        # A relationship's join columns belong to the semantic model too, whether or not a field
+        # maps them. Found in Phase 8 M5 after a correct mapping review on real Olist: the reviewer
+        # rejected customers.customer_id as "the customer" (it's a per-order id; the person is
+        # customer_unique_id), which removed it from the trusted fields -- but orders -> customers
+        # still joins on that physical foreign key, so every "by region" query was refused here as
+        # "outside the semantic model". A relationship is a physical key validated by value
+        # overlap, independent of what the column means.
+        for relationship in semantic_model.relationships:
+            for ref in (relationship.from_field, relationship.to_field):
+                entity, _, column = ref.partition(".")
+                if entity in self.allowed_columns and column:
+                    self.allowed_columns[entity].add(column)
 
     def check(self, compiled: CompiledQuery) -> SQLCheckResult:
         violations: list[str] = []

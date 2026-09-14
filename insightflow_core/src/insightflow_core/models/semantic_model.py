@@ -27,6 +27,28 @@ FieldStatus = Literal["auto", "needs_confirmation", "confirmed", "rejected"]
 TRUSTED_FIELD_STATUSES: frozenset[str] = frozenset({"auto", "confirmed"})
 
 
+# Which of POC 1's canonical fields an LLM planner may group a chart or answer by. Everything else in the
+# vocabulary is a date (grouping by raw timestamps gives one bar per instant -- there's no time
+# bucketing yet), an amount (revenue, price: measures, not categories), or an identifier (a chart of
+# random ids; real Olist has no product or customer names to fall back on). Found on the first real
+# Olist dashboard, which charted revenue by transaction_date and customers by price.
+#
+# A closed allowlist on purpose: a field name that isn't here -- including one added to POC 1's
+# vocabulary later -- is never offered, rather than silently offered. Deterministic GROUP BY through
+# the analytics API is unaffected; this only constrains what LLM-planned output may choose.
+PLANNER_DIMENSION_FIELDS: frozenset[str] = frozenset({"category", "region", "product_name", "customer_name"})
+_DATE_FIELDS = frozenset({"transaction_date", "signup_date"})
+
+
+def planner_dimension_problem(field_name: str) -> str | None:
+    """None if an LLM planner may group by this field; otherwise why not, in words fit for a refusal."""
+    if field_name in PLANNER_DIMENSION_FIELDS:
+        return None
+    if field_name in _DATE_FIELDS:
+        return f'"{field_name}" is a date; grouping by individual timestamps isn\'t meaningful, and time bucketing isn\'t supported yet'
+    return f'"{field_name}" is an amount or identifier, not a category to group by'
+
+
 class SemanticField(BaseModel):
     name: str
     source_column: str

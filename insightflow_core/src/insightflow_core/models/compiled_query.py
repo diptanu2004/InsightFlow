@@ -10,6 +10,17 @@ class FieldLocation(BaseModel):
     source_column: str
 
 
+class CaveatRule(BaseModel):
+    """A structural condition the compiler knows would make a correct number misleading. The compiler
+    adds `column` to the SELECT; QueryExecutor attaches `message` to the result when that column's
+    value is at most `at_most`. Deterministic -- the engine says why a number can't mean what it
+    appears to, rather than leaving an LLM to explain it away."""
+
+    column: str
+    at_most: float
+    message: str
+
+
 class CompiledQuery(BaseModel):
     """`sql` may reference identifiers (table/column names) inlined directly — those are safe
     only because ASTValidator already checked them against the Semantic Model's known names
@@ -22,3 +33,8 @@ class CompiledQuery(BaseModel):
     sql: str
     params: dict[str, Any] = {}
     result_shape: str  # "scalar" | "grouped"
+    caveat_rules: list[CaveatRule] = []
+    # The LIMIT actually applied, so the executor can tell a result that filled it (possibly cut
+    # off) from one that's complete.
+    row_limit: int = 0
+

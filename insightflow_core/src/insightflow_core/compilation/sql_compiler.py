@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from insightflow_core.compilation.field_resolver import FieldResolver
-from insightflow_core.compilation.measure_binding import bind_metric
+from insightflow_core.compilation.measure_binding import bind_metric, resolve_time_entity
 from insightflow_core.models import (
     AnalyticalQuery,
     CompiledQuery,
@@ -12,6 +12,7 @@ from insightflow_core.models import (
     SortSpec,
     TimeFilter,
 )
+from insightflow_core.models.compiled_query import CaveatRule
 from insightflow_core.models.query import HavingClause
 from insightflow_core.models.registry import AggregationType
 from insightflow_core.registry import MetricRegistry
@@ -90,6 +91,7 @@ class SQLCompiler:
     def compile(self, query: AnalyticalQuery) -> CompiledQuery:
         resolved = self.registry.resolve(query.metric)
         params: dict = {}
+        caveat_rules: list[CaveatRule] = []
 
         # Every measure is bound to a concrete entity for THIS dataset once, up front, and the
         # pinned copies are what the _compile_* methods below receive -- so their `measure.entity`
@@ -110,13 +112,22 @@ class SQLCompiler:
             elif metric.kind == MetricKind.GROWTH:
                 sql = self._compile_growth(bound["base"], query, params)
             elif metric.kind == MetricKind.HAVING_RATIO:
-                sql = self._compile_having_ratio(metric, having, bound["threshold"], bound["denominator"], params)
+                sql = self._compile_having_ratio(
+                    metric, having, bound["threshold"], bound["denominator"], params, caveat_rules
+                )
             else:
                 raise ValueError(f"unhandled MetricKind: {metric.kind}")
 
-        sql = self._apply_sort_limit(sql, query.sort, query.limit)
         grouped = query.operation == OperationType.GROUP_BY and query.dimension is not None
-        return CompiledQuery(sql=sql, params=params, result_shape="grouped" if grouped else "scalar")
+        row_limit = min(query.limit, self.max_row_limit) if query.limit is not None else self.max_row_limit
+        sql = self._apply_sort_limit(sql, query.sort, row_limit, query.dimension if grouped else None)
+        return CompiledQuery(
+            sql=sql,
+            params=params,
+            result_shape="grouped" if grouped else "scalar",
+            caveat_rules=caveat_rules,
+            row_limit=row_limit,
+        )
 
     # -- MetricKind dispatch -------------------------------------------------------------
 
@@ -253,6 +264,7 @@ class SQLCompiler:
         threshold_measure: Measure,
         denominator: Measure,
         params: dict,
+        caveat_rules: list[CaveatRule],
     ) -> str:
         if having is None:
             raise ValueError(f'metric "{metric.name}" is HAVING_RATIO but has no having clause (registry or override)')
@@ -313,8 +325,27 @@ class SQLCompiler:
             f"FROM {from_clause} GROUP BY {group_col_sql}"
             f") "
             f"SELECT CAST((SELECT COUNT(*) FROM grp WHERE grp_value {having.operator} ${threshold_param}) AS DOUBLE) "
-            f"/ NULLIF({denominator_sql}, 0) AS value"
+            f"/ NULLIF({denominator_sql}, 0) AS value, "
+            f"(SELECT MAX(grp_value) FROM grp) AS max_group_value"
         )
+        # A "at least N" threshold that no group can ever reach is 0 by construction. Found on real
+        # Olist: every customer_id appears on exactly one order (customer_id is per-order there; the
+        # person is customer_unique_id), so repeat_purchase_rate was a hard 0 against a true 3.12%,
+        # and a dashboard narrative presented it as a finding. The engine can't tell a per-record key
+        # from a store with genuinely no repeat customers, so it doesn't refuse -- it says what it
+        # can see: every group holds a single item.
+        if having.operator in (">=", ">") and float(having.value) > 1:
+            caveat_rules.append(
+                CaveatRule(
+                    column="max_group_value",
+                    at_most=1,
+                    message=(
+                        f'every "{metric.group_by_field}" has at most one "{threshold_measure.name}", so this '
+                        f"rate is 0 by construction. If \"{metric.group_by_field}\" identifies a single "
+                        "record rather than a stable one in this dataset, it can't measure repeats."
+                    ),
+                )
+            )
         return sql
 
     # -- shared building blocks -----------------------------------------------------------
@@ -359,6 +390,19 @@ class SQLCompiler:
         return f"{sql} {where_sql}"
 
     def _time_filter_predicate(self, time_filter: TimeFilter, entity: str, params: dict, prefix: str) -> str:
+        time_entity = resolve_time_entity(entity, self.TIME_FIELD, self.field_resolver.semantic_model)
+        if time_entity != entity:
+            # The date lives one relationship away (e.g. payments -> orders). A semi-join rather than
+            # a JOIN: `key IN (SELECT key FROM dated WHERE ...)` can only keep or drop rows of
+            # `entity`, never repeat them, so the aggregate is safe whatever the relationship's
+            # cardinality -- which Relationship doesn't record (see _compile_grouped_base's fan-out
+            # note for what a plain JOIN costs).
+            left_entity, left_col, right_entity, right_col = self._resolve_join(entity, time_entity)
+            inner = self._time_filter_predicate(time_filter, time_entity, params, prefix)
+            return (
+                f'"{left_entity}"."{left_col}" IN '
+                f'(SELECT "{right_entity}"."{right_col}" FROM "{right_entity}" WHERE {inner})'
+            )
         loc = self.field_resolver.resolve_field(entity, self.TIME_FIELD)
         col = f'"{loc.entity}"."{loc.source_column}"'
         start_key, end_key = f"{prefix}_start", f"{prefix}_end"
@@ -380,9 +424,19 @@ class SQLCompiler:
         params[end_key] = time_filter.end_date + timedelta(days=1)
         return f"{col} >= ${start_key} AND {col} < ${end_key}"
 
-    def _apply_sort_limit(self, sql: str, sort: SortSpec | None, limit: int | None) -> str:
+    def _apply_sort_limit(self, sql: str, sort: SortSpec | None, row_limit: int, dimension: str | None) -> str:
+        order: list[str] = []
         if sort is not None:
-            direction = "ASC" if sort.direction == "asc" else "DESC"
-            sql = f'{sql} ORDER BY "{sort.field}" {direction}'
-        effective_limit = min(limit, self.max_row_limit) if limit is not None else self.max_row_limit
-        return f"{sql} LIMIT {int(effective_limit)}"
+            order.append(f'"{sort.field}" {"ASC" if sort.direction == "asc" else "DESC"}')
+        elif dimension is not None:
+            # A grouped result with no requested order used to be LIMITed in whatever order DuckDB
+            # produced -- so past the row cap, WHICH groups survived was arbitrary. Found on real
+            # Olist with ~2,100 cities per quarter against a 1,000-row cap: chat's period comparison
+            # zero-filled the cities that happened to be cut and reported Brasilia's 442 orders as
+            # "461 -> 0". Largest first makes a cut a ranking rather than a lottery.
+            order.append('"value" DESC')
+        if dimension is not None:
+            order.append(f'"{dimension}"')  # deterministic tie-break
+        if order:
+            sql = f"{sql} ORDER BY {', '.join(order)}"
+        return f"{sql} LIMIT {int(row_limit)}"
