@@ -100,10 +100,11 @@ Phase 10 — Security + Observability + Deployment
 Rationale: validate every hard AI/system component in isolation (headless, CLI-driven, own venv)
 before integrating. Do not build auth/Redis/React/Power BI alongside the POCs.
 
-### Current status: POC 1–4 and Phases 5–7 are all done and closed.
-Phase 8+ (React frontend, Power BI, security/observability/deployment hardening beyond what
-Phase 6/7 already added) has not been started. Phase 8+ work should still be explicitly
-requested, not assumed — confirm with the user before starting it.
+### Current status: POC 1–4 and Phases 5–7 are done and closed; Phase 8 (React frontend) M0–M6 done.
+Phase 8's frontend lives in `frontend/` — design, E2E verification and real findings in
+`frontend/docs/hld.md`. Phase 9+ (Power BI, security/observability/deployment hardening beyond
+what Phase 6/7 already added) has not been started and should still be explicitly requested, not
+assumed — confirm with the user before starting it.
 
 ---
 
@@ -514,6 +515,9 @@ routes to existing pipelines" instead of a rewrite.
 - POC 1–4 and Phases 5–7 are all done and closed. Don't start Phase 8+ work (React frontend,
   Power BI, further deployment/security hardening beyond what Phase 6/7 already added) without
   the user explicitly asking for it first.
+- `frontend/e2e/olist-journey.spec.ts` (`npm run test:e2e`) is the whole-product check: real stack,
+  real Groq, five real Olist CSVs, asserted against DuckDB ground truth. Run it after any change
+  that can alter a computed number or a period — it caught growth comparing Q2 with Dec 31–Mar 31.
 - Don't build POC 3 component types beyond `KPI`/`LINE_CHART`/`BAR_CHART`/`PIE_CHART`/`TABLE`
   without first building the B3/B4 primitives in POC 2 that back them.
 - Don't silently resolve the two open technical decisions in §7 — surface them for a decision
@@ -598,6 +602,13 @@ routes to existing pipelines" instead of a rewrite.
   comparisons (`IncompleteComparison`), and the pie renderer drops shares. Found on real Olist
   (~2,100 cities per quarter vs a 1,000-row cap): zero-filling reported Brasília's 442 orders as
   "461 → 0". POC 3's pie charts fetch every group rather than the top 20 for the same reason.
+- **Every number in LLM prose must be one the engine produced.** insightflow_core's
+  `validation/number_grounding.ungrounded_numbers` (rounding-tolerant) compares prose with the exact prompt
+  the LLM saw: POC 4 withholds a chat explanation that fails it, POC 3 withholds a dashboard narrative and
+  blanks a component rationale. Found when the chat explanation LLM summed three verified region counts on
+  real Olist. Questions limited to specific dimension values are refused via
+  `QuestionIntent.dimension_values` until the AST can filter by value. Use the same check for any new
+  LLM text shown next to numbers.
 - The SQL safety checker allowlists relationship join columns as well as trusted fields: a correct
   mapping review can reject a key column's *meaning* while the physical foreign key still joins.
 - LLM planners may only group by categorical fields (`PLANNER_DIMENSION_FIELDS` in
