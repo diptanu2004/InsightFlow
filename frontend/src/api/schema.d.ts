@@ -389,9 +389,16 @@ export interface components {
          *     "Insight LLM prompt scope" question.
          */
         Answer: {
+            /** Data Through */
+            data_through?: string | null;
             /** Explanation */
             explanation: string;
             intent?: components["schemas"]["QuestionIntent"] | null;
+            /**
+             * Queries
+             * @default []
+             */
+            queries: components["schemas"]["AnalyticalQuery"][];
             /** Question */
             question: string;
             /** Reason */
@@ -644,6 +651,14 @@ export interface components {
          *     a real, computed, mathematically-undefined answer.
          */
         MetricResult: {
+            /** Caveats */
+            caveats?: string[];
+            /**
+             * Format
+             * @default number
+             * @enum {string}
+             */
+            format: "money" | "count" | "percent" | "number";
             metadata: components["schemas"]["QueryMetadata"];
             /** Metric Name */
             metric_name: string;
@@ -656,6 +671,11 @@ export interface components {
              * @enum {string}
              */
             shape: "scalar" | "grouped";
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
             /** Value */
             value?: number | null;
         };
@@ -750,6 +770,12 @@ export interface components {
         QuestionResult: {
             /** Category Deltas */
             category_deltas?: components["schemas"]["CategoryDelta"][] | null;
+            /**
+             * Format
+             * @default number
+             * @enum {string}
+             */
+            format: "money" | "count" | "percent" | "number";
             metric_result?: components["schemas"]["MetricResult"] | null;
         };
         /** RefreshRequest */

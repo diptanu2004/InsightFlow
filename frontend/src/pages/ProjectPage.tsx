@@ -4,6 +4,8 @@ import { ApiError } from '../api/client'
 import { useDatasets, useOrganization, useProject } from '../api/queries'
 import { ROLE_LABELS, hasAtLeastRole } from '../auth/roles'
 import DatasetUpload from '../components/DatasetUpload'
+import ChatPanel from '../components/chat/ChatPanel'
+import DashboardSection from '../components/dashboard/DashboardSection'
 import SemanticModelView from '../components/SemanticModelView'
 
 export default function ProjectPage() {
@@ -106,17 +108,9 @@ export default function ProjectPage() {
         )}
       </section>
 
-      <div className="mt-10 space-y-3">
-        {[
-          ['Dashboard', 'Auto-generated dashboard from the semantic model — M4.'],
-          ['Ask', 'Natural-language questions with verified numbers — M5.'],
-        ].map(([title, description]) => (
-          <div key={title} className="rounded-lg border border-dashed border-slate-300 px-4 py-5">
-            <h2 className="text-sm font-medium text-slate-700">{title}</h2>
-            <p className="mt-1 text-sm text-slate-500">{description}</p>
-          </div>
-        ))}
-      </div>
+      {activeDataset && projectId && <DashboardSection key={activeDataset.id} projectId={projectId} />}
+
+      {activeDataset && projectId && <ChatPanel key={activeDataset.id} projectId={projectId} />}
     </div>
   )
 }

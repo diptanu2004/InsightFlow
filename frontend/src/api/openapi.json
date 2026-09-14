@@ -102,6 +102,18 @@
       "Answer": {
         "description": "POC 4's actual deliverable. `refused=True` means `result` is None and `explanation` is a\ndeterministic reason string (from the planner's own refusal, or from QuestionValidator) --\nInsightGenerator is never invoked for a refused question, see class_diagram.md's resolved\n\"Insight LLM prompt scope\" question.",
         "properties": {
+          "data_through": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Through"
+          },
           "explanation": {
             "title": "Explanation",
             "type": "string"
@@ -115,6 +127,14 @@
                 "type": "null"
               }
             ]
+          },
+          "queries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AnalyticalQuery"
+            },
+            "title": "Queries",
+            "type": "array"
           },
           "question": {
             "title": "Question",
@@ -690,6 +710,24 @@
       "MetricResult": {
         "description": "One typed shape for both scalar and grouped results (hld.md's resolved open question):\n`value` for a plain KPI, `rows` for a grouped/dimension query.\n\n`shape` is the authoritative signal for which one applies -- mirrors CompiledQuery's own\n`result_shape` field (set from it directly in QueryExecutor.execute), rather than inferring\nshape from which of `value`/`rows` happens to be non-None. That inference used to be the only\nsignal, and broke on a real, previously-undiscovered case (found via\npoc4_nl_chatbot/tests/test_real_olist_integration.py): a scalar GROWTH query whose comparison\nperiod matches zero rows produces a legitimately-NULL value (`NULLIF(0, 0)`'s division), which\nis a valid scalar result -- \"undefined,\" not \"absent, so this must actually be a grouped\nresult\" -- but the old presence-based invariant couldn't tell the difference and raised\ninstead of returning `value=None`. `shape=\"scalar\"` with `value=None` now means exactly that:\na real, computed, mathematically-undefined answer.",
         "properties": {
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "format": {
+            "default": "number",
+            "enum": [
+              "money",
+              "count",
+              "percent",
+              "number"
+            ],
+            "title": "Format",
+            "type": "string"
+          },
           "metadata": {
             "$ref": "#/components/schemas/QueryMetadata"
           },
@@ -719,6 +757,11 @@
             ],
             "title": "Shape",
             "type": "string"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           },
           "value": {
             "anyOf": [
@@ -931,6 +974,17 @@
               }
             ],
             "title": "Category Deltas"
+          },
+          "format": {
+            "default": "number",
+            "enum": [
+              "money",
+              "count",
+              "percent",
+              "number"
+            ],
+            "title": "Format",
+            "type": "string"
           },
           "metric_result": {
             "anyOf": [

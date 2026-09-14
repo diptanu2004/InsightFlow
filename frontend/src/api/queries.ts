@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { postForm, postJson, request } from './client'
-import type { DatasetOut, JobOut, MappingDecision, OrganizationOut, ProjectOut } from './types'
+import type { Answer, DatasetOut, HydratedDashboard, JobOut, MappingDecision, OrganizationOut, ProjectOut } from './types'
 
 const ORGANIZATIONS_KEY = ['organizations']
 
@@ -94,6 +94,24 @@ export function useReviewMappings(projectId: string | undefined) {
     mutationFn: ({ datasetId, decisions }: { datasetId: string; decisions: MappingDecision[] }) =>
       postJson<DatasetOut>(`/projects/${projectId}/datasets/${datasetId}/mapping-decisions`, { decisions }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['datasets', projectId] }),
+  })
+}
+
+/**
+ * A mutation, not a query: generating spends an LLM planning call, so it runs only when someone
+ * asks, never on mount or window focus. Dashboards are ephemeral in v1 (no dashboards table); the
+ * backend's result cache makes asking again for the same dataset version free.
+ */
+export function useGenerateDashboard(projectId: string | undefined) {
+  return useMutation({
+    mutationFn: () => postJson<HydratedDashboard>(`/projects/${projectId}/dashboard/generate`, {}),
+  })
+}
+
+/** One question, one answer: the backend keeps no conversation, so each question stands alone. */
+export function useAskQuestion(projectId: string | undefined) {
+  return useMutation({
+    mutationFn: (question: string) => postJson<Answer>(`/projects/${projectId}/chat/ask`, { question }),
   })
 }
 
