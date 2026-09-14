@@ -33,13 +33,14 @@ def bootstrap_registry() -> MetricRegistry:
     #                file (customer_id is on both orders and customers, in the sample data too).
     # A hint only narrows a genuinely ambiguous field. On an upload with no orders table at all,
     # `customers` falls back to the only entity carrying customer_id -- all customers on file.
-    registry.register_measure(Measure(name="revenue", source_field="revenue", aggregation=AggregationType.SUM))
+    registry.register_measure(Measure(name="revenue", source_field="revenue", aggregation=AggregationType.SUM, format="money"))
     registry.register_measure(
         Measure(
             name="orders",
             source_field="order_id",
             aggregation=AggregationType.COUNT_DISTINCT,
             colocate_with_field="customer_id",
+            format="count",
         )
     )
     registry.register_measure(
@@ -48,6 +49,7 @@ def bootstrap_registry() -> MetricRegistry:
             source_field="customer_id",
             aggregation=AggregationType.COUNT_DISTINCT,
             colocate_with_field="order_id",
+            format="count",
         )
     )
     # Same underlying column as "orders", but registered separately: this one is meant to be
@@ -58,6 +60,7 @@ def bootstrap_registry() -> MetricRegistry:
             source_field="order_id",
             aggregation=AggregationType.COUNT_DISTINCT,
             colocate_with_field="customer_id",
+            format="count",
         )
     )
 
@@ -73,6 +76,7 @@ def bootstrap_registry() -> MetricRegistry:
             numerator_measure="revenue",
             denominator_measure="orders",
             description="Average Order Value = revenue / orders",
+            format="money",
         )
     )
     registry.register_metric(
@@ -81,6 +85,7 @@ def bootstrap_registry() -> MetricRegistry:
             kind=MetricKind.GROWTH,
             base_measure="revenue",
             description="Revenue growth between two periods",
+            format="percent",
         )
     )
     registry.register_metric(
@@ -89,6 +94,7 @@ def bootstrap_registry() -> MetricRegistry:
             kind=MetricKind.GROWTH,
             base_measure="orders",
             description="Order-count growth between two periods",
+            format="percent",
         )
     )
     registry.register_metric(
@@ -97,6 +103,7 @@ def bootstrap_registry() -> MetricRegistry:
             kind=MetricKind.GROWTH,
             base_measure="customers",
             description="Distinct-customer growth between two periods",
+            format="percent",
         )
     )
     registry.register_metric(
@@ -108,6 +115,7 @@ def bootstrap_registry() -> MetricRegistry:
             group_by_field="customer_id",
             having=HavingClause(field="orders_per_customer", operator=">=", value=2),
             description="Share of customers with 2 or more orders",
+            format="percent",
         )
     )
 

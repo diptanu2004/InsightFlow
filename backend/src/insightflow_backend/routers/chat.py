@@ -43,6 +43,12 @@ def ask(
         chat_pipeline = cache.get_or_build_chat(dataset)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"this dataset can't be queried in chat: {e}")
-    result = chat_pipeline.answer(body.question)  # never raises for refusals -- Answer.refused carries that
+    try:
+        # Refusals come back as Answer.refused, not exceptions. A ValueError here is the engine itself
+        # declining a query that passed validation (e.g. the SQL safety check) -- the same case the
+        # analytics and dashboard routes already report as 422; it escaped this route as a raw 500.
+        result = chat_pipeline.answer(body.question)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"couldn't compute an answer: {e}")
     result_cache.set(cache_key, result.model_dump_json())
     return result

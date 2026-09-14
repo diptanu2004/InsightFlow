@@ -12,6 +12,7 @@ from insightflow_core.models import SemanticModel as CoreSemanticModel
 from insightflow_core.pipeline import AnalyticsEnginePipeline, build_pipeline
 from insightflow_chatbot.llm.groq_client import GroqLLMClient as ChatbotGroqLLMClient
 from insightflow_chatbot.pipeline import QuestionAnsweringPipeline, build_question_answering_pipeline
+from insightflow_chatbot.services.date_bounds import infer_date_bounds
 from insightflow_dashboard.dashboard.pipeline import DashboardGenerationPipeline, build_dashboard_pipeline
 from insightflow_dashboard.llm.groq_client import GroqLLMClient as DashboardGroqLLMClient
 from insightflow_schema_discovery.llm.groq_client import GroqLLMClient as SchemaGroqLLMClient
@@ -46,6 +47,14 @@ def build_analytics_engine(semantic_model: CoreSemanticModel, data_dir: str) -> 
 
 def build_dashboard(semantic_model: CoreSemanticModel, data_dir: str) -> DashboardGenerationPipeline:
     registry = bootstrap_registry()
+    # The dataset's own latest date, inferred exactly the way chat infers it. Without it, POC 3's
+    # growth signals were measured back from the wall clock, so on data that ends in 2018 every growth
+    # window was empty and the planner silently got no growth signals at all. If this dataset has no
+    # single usable date, growth signals are skipped rather than measured from today.
+    try:
+        _, reference_date = infer_date_bounds(semantic_model, data_dir, settings.time_entity, settings.time_field)
+    except ValueError:
+        reference_date = None
     return build_dashboard_pipeline(
         semantic_model,
         registry,
@@ -53,6 +62,7 @@ def build_dashboard(semantic_model: CoreSemanticModel, data_dir: str) -> Dashboa
         DashboardGroqLLMClient(),
         min_components=settings.dashboard_min_components,
         max_components=settings.dashboard_max_components,
+        reference_date=reference_date,
     )
 
 

@@ -22,7 +22,17 @@ import redis
 # (binding rules, which mappings are trusted, compiler semantics, a registry definition). Old entries
 # are then never read again and simply expire -- no flush needed on deploy.
 #   2 -- Phase 8 M4: per-dataset measure binding; engine computes only on trusted mappings.
-COMPUTATION_VERSION = 2
+#   3 -- Phase 8: time filters through a related table, result caveats, categorical-only planner
+#        dimensions, dashboard growth signals from the data's own date.
+#   4 -- Phase 8: caveated metrics withheld from the dashboard planner; caveated chat answers
+#        explained deterministically.
+#   5 -- Phase 8: relative periods anchored on the last month of real volume, not a sparse tail.
+#   6 -- Phase 8 M4: results carry the registry's display format; LLM text never adds a currency.
+#   7 -- Phase 8 M4: pie charts fetch every group instead of the top 20.
+#   8 -- Phase 8 M5: chat answers carry the queries run and the date periods are measured from.
+#   9 -- Phase 8 M5: grouped results ordered largest-first by default and flagged when truncated.
+#  10 -- Phase 8 M5: chat explanations receive formatted values and a bounded row sample.
+COMPUTATION_VERSION = 10
 
 
 def build_cache_key(dataset_id, route: str, payload: dict) -> str:

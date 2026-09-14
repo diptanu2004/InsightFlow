@@ -1,7 +1,9 @@
 import logging
 import time
 
+import groq
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 
 from insightflow_backend.auth.rate_limit import build_auth_rate_limiter, build_llm_rate_limiter, build_redis_client
@@ -86,6 +88,42 @@ def create_app() -> FastAPI:
         )
         response.headers["X-Request-ID"] = request_id
         return response
+
+    @app.exception_handler(groq.RateLimitError)
+    async def llm_rate_limited(request: Request, exc: groq.RateLimitError) -> JSONResponse:
+        # The AI provider's own quota (not this backend's rate limiter) -- previously an unhandled
+        # 500 from dashboard/generate and chat/ask, found when Groq's daily token limit ran out. It's a
+        # temporary, external condition, so 503 plus the provider's retry hint, not a server fault.
+        retry_after = exc.response.headers.get("retry-after") if exc.response is not None else None
+        headers = {"Retry-After": retry_after} if retry_after else {}
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "The AI provider's usage limit has been reached. Try again in a few minutes."},
+            headers=headers,
+        )
+
+    @app.exception_handler(groq.APIConnectionError)
+    @app.exception_handler(groq.InternalServerError)
+    async def llm_unavailable(request: Request, exc: groq.APIError) -> JSONResponse:
+        # Timeouts/connection failures (APITimeoutError is an APIConnectionError) and the provider's own
+        # 5xx -- transient, external, and previously unhandled 500s: every chat question in a live test
+        # failed that way during a stretch of Groq timeouts.
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "The AI provider didn't respond. Try again in a moment."},
+        )
+
+    @app.exception_handler(groq.APIStatusError)
+    async def llm_rejected(request: Request, exc: groq.APIStatusError) -> JSONResponse:
+        # Any other provider error response (RateLimitError and InternalServerError are subclasses with
+        # their own, more specific handlers above). Found as a raw 500 when an explanation prompt grew
+        # past the provider's request-size limit (413). Logged so a request-shape bug here isn't hidden
+        # behind a friendly message.
+        logger.warning("llm_provider_rejected_request", extra={"status_code": exc.status_code})
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "The AI provider couldn't process this request. Try rephrasing or narrowing the question."},
+        )
 
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])

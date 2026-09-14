@@ -585,3 +585,30 @@ routes to existing pipelines" instead of a rewrite.
   row is the active dataset. Keep it that way — both caches depend on rows never changing.
 - `uvicorn --reload` has repeatedly failed to pick up changes on this Windows dev machine. After
   editing backend/core/POC code, restart the server rather than trusting the reloader.
+- **A prompt instruction is not a guardrail.** On real Olist, a planner explicitly told not to draw
+  conclusions from a caveated value still wrote "suggesting dependence on new customer acquisition".
+  When a number is correct but misleading, the engine attaches `MetricResult.caveats` (via
+  `CaveatRule`), and LLM layers are kept from interpreting it *structurally*: POC 3 withholds a
+  caveated metric from the planner entirely; POC 4 explains a caveated answer deterministically,
+  without the insight LLM. The dashboard planner writes its narrative before components are
+  computed, so it may only characterize values present in its diagnostic signals.
+- **A grouped result may be cut off — check `MetricResult.truncated` before treating `rows` as complete.**
+  Grouped queries are ordered largest-first by default (never an arbitrary LIMIT), and anything that
+  needs the whole set must refuse or degrade when truncated: POC 4 refuses per-group period
+  comparisons (`IncompleteComparison`), and the pie renderer drops shares. Found on real Olist
+  (~2,100 cities per quarter vs a 1,000-row cap): zero-filling reported Brasília's 442 orders as
+  "461 → 0". POC 3's pie charts fetch every group rather than the top 20 for the same reason.
+- The SQL safety checker allowlists relationship join columns as well as trusted fields: a correct
+  mapping review can reject a key column's *meaning* while the physical foreign key still joins.
+- LLM planners may only group by categorical fields (`PLANNER_DIMENSION_FIELDS` in
+  insightflow_core's semantic_model.py) — raw timestamps, amounts and ids produced meaningless charts
+  (revenue by transaction_date, customers by price). Deterministic GROUP BY via the analytics API is
+  unaffected.
+- **Never measure dates from the wall clock.** Growth windows and "last quarter" use the dataset's
+  own latest date (`infer_date_bounds`); with none available, growth signals are skipped. POC 3's
+  `SignalGatherer` silently measured 2018 data from 2026 until Phase 8. The anchor also skips a sparse
+  trailing tail (`anchor_date`: a trailing month under 10% of recent median volume): Olist's export
+  stops in August 2018 but has 20 stray later orders, which turned real −10% growth into a reported
+  "−52%, deteriorating" business. A time filter on a measure
+  whose table has no date goes through the one directly related dated table as a semi-join
+  (`resolve_time_entity`), which can't double-count.
