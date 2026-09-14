@@ -71,3 +71,18 @@ def test_dimension_signals_are_skipped_when_dimension_does_not_exist(engine, reg
     names = {s.name for s in gatherer.gather()}
     assert not any("category" in n or "region" in n for n in names)
     assert "total_revenue" in names
+
+
+def test_composite_kpis_are_signals_so_the_planner_sees_their_real_values(engine, semantic_model, registry):
+    """Phase 8: the planner wrote "the low repeat purchase rate reveals ..." about a rate it had never
+    seen. It can only ground a claim in a value it was actually given."""
+    results = {r.name: r.result for r in SignalGatherer(engine, semantic_model, registry, reference_date=date(2026, 3, 1)).gather()}
+    assert "average_order_value" in results
+    assert "repeat_purchase_rate" in results
+
+
+def test_without_a_reference_date_growth_signals_are_skipped_not_measured_from_today(engine, semantic_model, registry):
+    """A wall-clock default measured Olist (ends 2018) from today, so every growth window was empty."""
+    names = {r.name for r in SignalGatherer(engine, semantic_model, registry).gather()}
+    assert not {"revenue_growth", "order_growth", "customer_growth"} & names
+    assert "total_revenue" in names

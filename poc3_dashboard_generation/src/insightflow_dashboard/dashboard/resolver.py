@@ -34,6 +34,11 @@ class DashboardDataResolver:
                 metric=component.metric_name,
                 dimension=component.dimension,
                 sort=SortSpec(field="value", direction="desc"),
-                limit=DEFAULT_CHART_ROW_LIMIT,
+                # A pie is part-to-whole, so it needs the whole: capped at the top 20, real Olist
+                # showed "SP 42.5%" as SP's share of the top 20 states' customers (99,441 total, 27
+                # states) and silently dropped the other 7. Pies get every group (the engine's own
+                # row cap still applies); the renderer folds the tail into "Other". Bars and tables
+                # rank, so a top-N cut is honest there -- and the renderer labels it.
+                limit=None if component.type == ComponentType.PIE_CHART else DEFAULT_CHART_ROW_LIMIT,
             )
         return AnalyticalQuery(operation=OperationType.AGGREGATE, metric=component.metric_name)

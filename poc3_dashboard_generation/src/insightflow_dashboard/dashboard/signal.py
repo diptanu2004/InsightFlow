@@ -46,6 +46,15 @@ _BASE_KPI_SIGNALS = (
     ("total_customers", "customers"),
 )
 
+# (signal_name, metric_name) for composite KPIs. Phase 8: the planner used to write a narrative about
+# these without ever seeing their values -- on real Olist it declared "the low repeat purchase rate
+# reveals growth is driven by new customers" about a rate it never computed (and that was 0 only by
+# construction). Computing them here lets the narrative be grounded in real values and their caveats.
+_COMPOSITE_KPI_SIGNALS = (
+    ("average_order_value", "aov"),
+    ("repeat_purchase_rate", "repeat_purchase_rate"),
+)
+
 # (signal_name, growth_metric_name) -- attempted if the growth metric is registered.
 _GROWTH_SIGNALS = (
     ("revenue_growth", "revenue_growth"),
@@ -83,7 +92,12 @@ class SignalGatherer:
         self.semantic_model = semantic_model
         self.registry = registry
         self.field_resolver = FieldResolver(semantic_model)
-        self.reference_date = reference_date or date.today()
+        # No wall-clock fallback: growth windows are measured back from this date, and a dataset
+        # that ends in 2018 measured from today has empty windows, so growth signals silently
+        # vanished for every real upload built through build_dashboard_pipeline (found in Phase 8).
+        # None means "no data-derived reference date" -- growth signals are skipped, not guessed.
+        # Same rule POC 4 settled on for chat's date bounds.
+        self.reference_date = reference_date
 
     def gather(self) -> list[SignalResult]:
         results: list[SignalResult] = []
@@ -107,12 +121,13 @@ class SignalGatherer:
     def fixed_signals(self) -> list[SignalDefinition]:
         signals: list[SignalDefinition] = []
 
-        for name, metric in _BASE_KPI_SIGNALS:
+        for name, metric in _BASE_KPI_SIGNALS + _COMPOSITE_KPI_SIGNALS:
             if self.registry.is_registered(metric):
                 signals.append(SignalDefinition(name=name, query=AnalyticalQuery(operation=OperationType.AGGREGATE, metric=metric)))
 
-        current, comparison = self._growth_windows()
-        for name, metric in _GROWTH_SIGNALS:
+        growth_signals = _GROWTH_SIGNALS if self.reference_date is not None else ()
+        current, comparison = self._growth_windows() if growth_signals else (None, None)
+        for name, metric in growth_signals:
             if self.registry.is_registered(metric):
                 signals.append(
                     SignalDefinition(

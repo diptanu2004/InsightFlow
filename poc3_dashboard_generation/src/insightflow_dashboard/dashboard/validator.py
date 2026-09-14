@@ -10,6 +10,7 @@ from insightflow_dashboard.dashboard.spec import GROUPING_COMPONENT_TYPES, Compo
 from insightflow_dashboard.dashboard.validation_types import DashboardValidationError, DashboardValidationResult
 from insightflow_core.compilation.field_resolver import FieldResolver
 from insightflow_core.models.registry import MetricKind
+from insightflow_core.models.semantic_model import planner_dimension_problem
 from insightflow_core.validation.metric_resolvability import group_by_problem, unresolvable_reason
 from insightflow_dashboard.registry import MetricRegistry
 
@@ -50,6 +51,11 @@ class DashboardValidator:
         errors += self._validate_metric_registered(component)
         if component.dimension is not None:
             errors += self._validate_dimension_exists(component)
+            # The planner is only offered categorical dimensions; this catches one it chose anyway.
+            if (problem := planner_dimension_problem(component.dimension)) is not None:
+                errors.append(
+                    DashboardValidationError(code="dimension_not_chartable", message=problem, component_id=component.component_id)
+                )
         # Only meaningful once the metric is known to be registered -- avoids a confusing second
         # error (or an AttributeError from registry.resolve on an unknown name) piled onto an
         # already-reported unknown_metric.

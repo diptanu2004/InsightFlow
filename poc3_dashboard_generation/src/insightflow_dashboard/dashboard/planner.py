@@ -75,6 +75,13 @@ class DashboardPlanner:
             "story than the growth signals above, you MUST name that tension explicitly in the "
             "dashboard's `narrative` and in that component's `rationale` -- do not describe the "
             "signals as if they were independently good news.\n\n"
+            "Ground every claim in the diagnostic signals above. The `narrative` and each "
+            "`rationale` may only describe a metric's value (high, low, healthy, declining, driven "
+            "by ...) if that value appears in the signals list -- you do not see the values of the "
+            "components you choose, so never characterize a metric that isn't listed there. A signal "
+            "marked CAVEAT is not evidence of anything: never build a conclusion on it; if you mention "
+            "it at all, say it could not be measured reliably and why. Nothing in the data says which "
+            "currency amounts are in, so never write a currency symbol or code.\n\n"
             f"Allowed component types: {component_types_block}\n\n"
             f"Produce between {self.min_components} and {self.max_components} components. Every "
             "component's `metric_name` MUST be one of the metrics usable as a component's "
@@ -96,6 +103,7 @@ class DashboardPlanner:
         # SignalGatherer never actually hands this an undefined scalar (it filters those out
         # itself), but branching on `shape` here is still the correct check, not an inference.
         result = signal.result
-        if result.shape == "scalar":
-            return f"{result.value:.2f}"
-        return str(result.rows)
+        text = f"{result.value:.2f}" if result.shape == "scalar" else str(result.rows)
+        if result.caveats:
+            return f"{text} [CAVEAT -- do not draw any conclusion from this value: {' '.join(result.caveats)}]"
+        return text

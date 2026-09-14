@@ -9,6 +9,7 @@ the single entry point a future FastAPI route calls directly.
 All dependencies are injectable, same as POC 1/POC 2's pipelines, so tests can swap any stage
 (e.g. a FakeLLMClient instead of real ChatGroq -- see tests/conftest.py).
 """
+from datetime import date
 from typing import Optional
 
 from insightflow_core.compilation import FieldResolver, SQLCompiler
@@ -27,6 +28,7 @@ from insightflow_dashboard.registry import MetricRegistry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
 from insightflow_core.compilation.measure_binding import bind_measure
+from insightflow_core.models.semantic_model import planner_dimension_problem
 from insightflow_core.validation.metric_resolvability import (
     group_by_problem,
     resolvable_metric_names,
@@ -55,7 +57,15 @@ class DashboardGenerationPipeline:
 
     def run(self) -> HydratedDashboard:
         signals = self.signal_gatherer.gather()
-        context = self._build_planner_context(signals)
+        # A metric whose value the engine caveated is withheld from the planner entirely -- no signal,
+        # not offered as a component. Telling the LLM "don't conclude from this" wasn't enough: on real
+        # Olist, with the caveat shown and the instruction in the prompt, the narrative still read
+        # "repeat purchase rate cannot be measured reliably, suggesting dependence on new customer
+        # acquisition". It can't narrate what it never sees. The metric stays queryable directly,
+        # with its caveat, through the analytics API.
+        withheld = {s.result.metric_name for s in signals if s.result.caveats}
+        signals = [s for s in signals if not s.result.caveats]
+        context = self._build_planner_context(signals, withheld=withheld)
 
         # Fail before the planner's LLM call, not after it: with nothing the dataset can compute,
         # every possible spec is invalid, so asking the planner would only spend tokens on a
@@ -79,7 +89,7 @@ class DashboardGenerationPipeline:
 
         return self.resolver.resolve(spec)
 
-    def _build_planner_context(self, signals) -> PlannerContext:
+    def _build_planner_context(self, signals, withheld: set[str] | frozenset[str] = frozenset()) -> PlannerContext:
         entities = [e.name for e in self.semantic_model.entities]
         # Found via the real Groq/real-Olist integration run (examples/real_olist_integration):
         # this used to list every canonical field name, ambiguous ones included. The planner has
@@ -89,7 +99,11 @@ class DashboardGenerationPipeline:
         # (FieldResolver.find_entity_for_field) DashboardValidator itself uses means the planner is
         # never told it can use a dimension the validator would reject anyway -- mirrors why
         # SUPPORTED_COMPONENT_TYPES already excludes LINE_CHART for the same reason.
-        all_dimension_names = sorted({f.name for e in self.semantic_model.entities for f in e.fields})
+        # Only categorical fields (PLANNER_DIMENSION_FIELDS) -- the first real Olist dashboard charted
+        # revenue by raw timestamp and customers by price, because every field was offered.
+        all_dimension_names = sorted(
+            {f.name for e in self.semantic_model.entities for f in e.fields if planner_dimension_problem(f.name) is None}
+        )
         dimensions = []
         for name in all_dimension_names:
             try:
@@ -100,7 +114,7 @@ class DashboardGenerationPipeline:
         # Same "only offer what the validator would accept" principle as the dimension filter
         # above, applied to metrics: a registered metric that can't resolve against THIS dataset's
         # semantic model is never shown to the planner. DashboardValidator re-checks it anyway.
-        runnable = resolvable_metric_names(self.registry, self.semantic_model)
+        runnable = resolvable_metric_names(self.registry, self.semantic_model) - set(withheld)
         metrics = [
             # The bound entity, not `measure.entity` -- that's an optional pin and usually unset.
             # Every runnable bare measure binds on its own, so bind_measure can't raise here.
@@ -165,6 +179,7 @@ def build_dashboard_pipeline(
     llm_client: LLMClient,
     min_components: Optional[int] = None,
     max_components: Optional[int] = None,
+    reference_date: Optional[date] = None,
 ) -> DashboardGenerationPipeline:
     """Convenience wiring, mirroring POC 2's build_pipeline(): construct every stage from just a
     SemanticModel + MetricRegistry + data directory + LLM client, using insightflow.config.settings
@@ -188,7 +203,8 @@ def build_dashboard_pipeline(
     return DashboardGenerationPipeline(
         semantic_model=semantic_model,
         registry=registry,
-        signal_gatherer=SignalGatherer(engine, semantic_model, registry),
+        # The dataset's own latest date, from the caller -- never the wall clock (see SignalGatherer).
+        signal_gatherer=SignalGatherer(engine, semantic_model, registry, reference_date=reference_date),
         planner=DashboardPlanner(llm_client, min_c, max_c),
         validator=DashboardValidator(registry, field_resolver, min_c, max_c),
         resolver=DashboardDataResolver(engine),

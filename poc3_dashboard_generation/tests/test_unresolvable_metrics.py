@@ -123,3 +123,66 @@ def test_validator_rejects_a_grouping_with_no_join_path(semantic_model, registry
     result = validator.validate(spec)
 
     assert [(e.code, e.component_id) for e in result.errors] == [("no_join_path", "bar_category")]
+
+
+def test_planner_is_never_offered_a_timestamp_amount_or_id_as_a_dimension(semantic_model, registry, make_fake_llm_client):
+    """The first real Olist dashboard charted revenue by transaction_date and customers by price."""
+    pipeline = _pipeline(semantic_model, registry, make_fake_llm_client(None))
+
+    context = pipeline._build_planner_context(signals=[])
+
+    assert set(context.available_dimensions) <= {"category", "region", "product_name", "customer_name"}
+    assert {"category", "region"} <= set(context.available_dimensions)
+    assert all(set(dims) <= set(context.available_dimensions) for dims in context.groupable_dimensions.values())
+
+
+def test_validator_rejects_a_chart_grouped_by_a_timestamp(semantic_model, registry):
+    validator = DashboardValidator(registry, FieldResolver(semantic_model), min_components=1, max_components=8)
+    spec = DashboardSpec(
+        title="t",
+        components=[
+            ComponentSpec(component_id="bar_date", type=ComponentType.BAR_CHART, metric_name="revenue", dimension="transaction_date")
+        ],
+    )
+
+    result = validator.validate(spec)
+
+    assert [(e.code, e.component_id) for e in result.errors] == [("dimension_not_chartable", "bar_date")]
+
+
+def test_a_caveated_metric_is_withheld_from_the_planner_entirely(semantic_model, registry, make_fake_llm_client):
+    """Phase 8: with the caveat shown and an instruction not to use it, the real-Olist narrative still
+    concluded "suggesting dependence on new customer acquisition" from a 0-by-construction rate."""
+    from insightflow_core.models import MetricResult, QueryMetadata
+
+    from insightflow_dashboard.dashboard.signal import SignalResult
+
+    spec = DashboardSpec(
+        title="t",
+        components=[
+            ComponentSpec(component_id="k1", type=ComponentType.KPI, metric_name="revenue"),
+            ComponentSpec(component_id="k2", type=ComponentType.KPI, metric_name="orders"),
+            ComponentSpec(component_id="k3", type=ComponentType.KPI, metric_name="aov"),
+        ],
+    )
+    llm = make_fake_llm_client(spec)
+    pipeline = _pipeline(semantic_model, registry, llm)
+
+    class _Gatherer:
+        def gather(self):
+            meta = QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1)
+            return [
+                SignalResult(name="total_revenue", result=MetricResult(metric_name="revenue", shape="scalar", value=790.0, metadata=meta)),
+                SignalResult(
+                    name="repeat_purchase_rate",
+                    result=MetricResult(
+                        metric_name="repeat_purchase_rate", shape="scalar", value=0.0, metadata=meta, caveats=["0 by construction"]
+                    ),
+                ),
+            ]
+
+    pipeline.signal_gatherer = _Gatherer()
+    pipeline.run()
+
+    assert "repeat_purchase_rate" not in llm.last_prompt
+    assert "total_revenue" in llm.last_prompt

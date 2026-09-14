@@ -41,3 +41,13 @@ def test_resolve_produces_hydrated_dashboard_with_real_values(engine):
 
     chart = next(c for c in dashboard.components if c.spec.component_id == "bar_category")
     assert chart.result.rows == [{"category": "Gadgets", "value": 660.0}, {"category": "Home", "value": 130.0}]
+
+
+def test_build_query_for_pie_chart_fetches_every_group(engine):
+    """A pie's percentages are shares of the whole. Capping it at the top 20 turned real Olist's
+    'SP 42.5%' into a share of only the top 20 states and silently dropped the rest."""
+    resolver = DashboardDataResolver(engine)
+    query = resolver.build_query(
+        ComponentSpec(component_id="p1", type=ComponentType.PIE_CHART, metric_name="revenue", dimension="category")
+    )
+    assert query.limit is None

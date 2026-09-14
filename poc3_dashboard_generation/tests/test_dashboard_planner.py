@@ -144,3 +144,27 @@ def test_prompt_instructs_planner_to_reconcile_conflicting_signals_in_the_narrat
     assert "name that tension explicitly" in prompt
     narrative_sentence = next(line for line in prompt.splitlines() if "`narrative` to a one- or two-sentence VERDICT" in line)
     assert "reconciling any tension" in narrative_sentence
+
+
+def test_caveated_signals_are_marked_and_the_narrative_must_be_grounded_in_signals(make_fake_llm_client):
+    caveated = SignalResult(
+        name="repeat_purchase_rate",
+        result=MetricResult(
+            metric_name="repeat_purchase_rate",
+            shape="scalar",
+            value=0.0,
+            metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1),
+            caveats=['every "customer_id" has at most one "orders_per_customer", so this rate is 0 by construction.'],
+        ),
+    )
+    context = _sample_context()
+    context.signals.append(caveated)
+    client = make_fake_llm_client(_fixed_spec())
+
+    DashboardPlanner(client, min_components=3, max_components=8).plan(context)
+    prompt = client.last_prompt
+
+    signal_line = next(line for line in prompt.splitlines() if line.startswith("- repeat_purchase_rate:"))
+    assert "CAVEAT" in signal_line and "0 by construction" in signal_line
+    assert "never characterize a metric that isn't listed there" in prompt
+    assert "never build a conclusion on it" in prompt
