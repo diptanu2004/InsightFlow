@@ -191,3 +191,101 @@ def test_a_period_comparison_on_a_cut_off_list_is_refused_not_zero_filled(
     assert answer.refused is True
     assert "incomplete lists" in answer.reason
     assert insight_llm.last_prompt is None
+
+
+class _ByOutputSchema:
+    """One fake LLM for the whole wired pipeline: the planner and the insight generator share a client."""
+
+    def __init__(self, *outputs):
+        self.outputs = {type(o): o for o in outputs}
+
+    def generate_structured(self, prompt, output_schema):
+        return self.outputs[output_schema]
+
+
+def _without_a_date_column(semantic_model):
+    # Real case: a 4-file Olist upload without the orders file, whose only date column
+    # (shipping_limit_date) was still awaiting review -- so the trusted model had no transaction_date.
+    for entity in semantic_model.entities:
+        entity.fields = [f for f in entity.fields if f.name != "transaction_date"]
+    return semantic_model
+
+
+def _build_wired_without_dates(semantic_model, registry, *outputs):
+    from pathlib import Path
+
+    from insightflow_core.pipeline import build_pipeline
+
+    from insightflow_chatbot.pipeline import build_question_answering_pipeline
+
+    model = _without_a_date_column(semantic_model)
+    data_dir = str(Path(__file__).parent.parent / "data" / "raw" / "sample")
+    engine = build_pipeline(model, registry, data_dir)
+    return build_question_answering_pipeline(model, registry, engine, _ByOutputSchema(*outputs), data_dir)
+
+
+def test_a_dataset_without_a_date_column_still_answers_questions_over_all_of_the_data(semantic_model, registry):
+    intent = QuestionIntent(answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE)
+    pipeline = _build_wired_without_dates(semantic_model, registry, intent, _ExplanationOutput(explanation="Revenue is 790."))
+
+    answer = pipeline.answer("What is our total revenue?")
+
+    assert answer.refused is False
+    assert answer.result.metric_result.value == 790.0
+    assert answer.data_through is None
+
+
+@pytest.mark.parametrize(
+    "intent",
+    [
+        QuestionIntent(answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE, time_expression=TimeExpression.LAST_QUARTER),
+        QuestionIntent(answerable=True, metric_name="revenue_growth", operation=QuestionOperation.GROWTH, time_expression=TimeExpression.LAST_QUARTER),
+        QuestionIntent(
+            answerable=True, metric_name="revenue", operation=QuestionOperation.GROWTH_BY_DIMENSION,
+            dimension="category", time_expression=TimeExpression.LAST_MONTH,
+        ),
+    ],
+    ids=["aggregate-last-quarter", "growth", "growth-by-dimension"],
+)
+def test_a_dataset_without_a_date_column_refuses_period_questions_with_a_reason(semantic_model, registry, intent):
+    pipeline = _build_wired_without_dates(semantic_model, registry, intent, _ExplanationOutput(explanation="never used"))
+
+    answer = pipeline.answer("What was revenue last quarter?")
+
+    assert answer.refused is True
+    assert "no confirmed date column" in answer.reason
+    assert answer.result is None
+
+
+def test_a_question_limited_to_specific_values_is_refused_before_anything_runs(semantic_model, registry, make_fake_llm_client):
+    intent = QuestionIntent(
+        answerable=True, metric_name="customers", operation=QuestionOperation.GROUP_BY, dimension="region",
+        dimension_values=["AL", "RN", "CE"],
+    )
+
+    class _NeverRuns:
+        def run(self, query):
+            raise AssertionError("a value-filtered question must not execute")
+
+    pipeline = _build_pipeline(
+        semantic_model, registry, _NeverRuns(), make_fake_llm_client(intent), make_fake_llm_client(RuntimeError("no insight call"))
+    )
+
+    answer = pipeline.answer("what is the total customers in AL, RN and CE")
+
+    assert answer.refused is True
+    assert "AL, RN, CE" in answer.reason
+    assert "customers by region" in answer.reason
+    assert answer.result is None
+
+
+def test_a_value_limited_aggregate_names_the_dimensions_it_could_be_broken_down_by(semantic_model, registry, engine, make_fake_llm_client):
+    """"How many customers are in SP?" planned as a plain aggregate said "by the relevant dimension"."""
+    intent = QuestionIntent(answerable=True, metric_name="customers", operation=QuestionOperation.AGGREGATE, dimension_values=["SP"])
+    pipeline = _build_pipeline(semantic_model, registry, engine, make_fake_llm_client(intent), make_fake_llm_client(RuntimeError("no insight call")))
+
+    answer = pipeline.answer("How many customers are in SP?")
+
+    assert answer.refused is True
+    assert "relevant dimension" not in answer.reason
+    assert "customers by " in answer.reason and "region" in answer.reason

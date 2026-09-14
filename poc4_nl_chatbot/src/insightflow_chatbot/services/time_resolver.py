@@ -16,6 +16,8 @@ from insightflow_core.models import GrowthSpec, TimeFilter
 
 from insightflow_chatbot.models.time_expression import TimeExpression
 
+_CALENDAR_PERIODS = frozenset({TimeExpression.LAST_MONTH, TimeExpression.LAST_QUARTER, TimeExpression.LAST_YEAR})
+
 
 class TimeExpressionResolver:
     def __init__(self, reference_date: date, min_date: date):
@@ -30,8 +32,25 @@ class TimeExpressionResolver:
 
     def resolve_growth_spec(self, expr: TimeExpression) -> GrowthSpec:
         current = self.resolve_time_filter(expr)
-        comparison = self._preceding_equal_length_period(current)
+        if expr in _CALENDAR_PERIODS:
+            # A complete calendar period compares against the calendar period before it. Calendar periods
+            # differ in length, so a day-count shift misaligned them: on real Olist data "last quarter vs
+            # the quarter before" compared Apr 1-Jun 30 with Dec 31-Mar 31 (Q2 has 91 days, Q1 90).
+            comparison = self._preceding_calendar_period(expr, current)
+        else:
+            comparison = self._preceding_equal_length_period(current)
         return GrowthSpec(current_period=current, comparison_period=comparison)
+
+    @classmethod
+    def _preceding_calendar_period(cls, expr: TimeExpression, period: TimeFilter) -> TimeFilter:
+        end = period.start_date - timedelta(days=1)
+        if expr == TimeExpression.LAST_MONTH:
+            start = end.replace(day=1)
+        elif expr == TimeExpression.LAST_QUARTER:
+            start = cls._quarter_start(end)
+        else:
+            start = end.replace(month=1, day=1)
+        return TimeFilter(start_date=start, end_date=end)
 
     def _period_bounds(self, expr: TimeExpression) -> tuple[date, date]:
         ref = self.reference_date

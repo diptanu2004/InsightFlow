@@ -82,6 +82,25 @@ def test_growth_spec_comparison_period_is_immediately_preceding_and_equal_length
     assert current_len == comparison_len
 
 
+@pytest.mark.parametrize(
+    ("reference", "expr", "current", "comparison"),
+    [
+        # Found on real Olist data: Q2 (91 days) was compared with Dec 31-Mar 31, not Q1 (90 days).
+        (date(2018, 8, 15), TimeExpression.LAST_QUARTER, (date(2018, 4, 1), date(2018, 6, 30)), (date(2018, 1, 1), date(2018, 3, 31))),
+        (date(2024, 2, 1), TimeExpression.LAST_QUARTER, (date(2023, 10, 1), date(2023, 12, 31)), (date(2023, 7, 1), date(2023, 9, 30))),
+        # March vs February, not a 31-day window starting Jan 29/30.
+        (date(2023, 4, 10), TimeExpression.LAST_MONTH, (date(2023, 3, 1), date(2023, 3, 31)), (date(2023, 2, 1), date(2023, 2, 28))),
+        (date(2024, 1, 10), TimeExpression.LAST_MONTH, (date(2023, 12, 1), date(2023, 12, 31)), (date(2023, 11, 1), date(2023, 11, 30))),
+        # A leap year is one day longer than the year before it.
+        (date(2025, 3, 1), TimeExpression.LAST_YEAR, (date(2024, 1, 1), date(2024, 12, 31)), (date(2023, 1, 1), date(2023, 12, 31))),
+    ],
+)
+def test_growth_over_a_complete_calendar_period_compares_with_the_preceding_calendar_period(reference, expr, current, comparison):
+    growth = TimeExpressionResolver(reference_date=reference, min_date=date(2016, 1, 1)).resolve_growth_spec(expr)
+    assert (growth.current_period.start_date, growth.current_period.end_date) == current
+    assert (growth.comparison_period.start_date, growth.comparison_period.end_date) == comparison
+
+
 def test_growth_spec_periods_never_overlap(resolver):
     for expr in TimeExpression:
         growth = resolver.resolve_growth_spec(expr)

@@ -4,6 +4,7 @@ understand; deterministic systems calculate"). Never invoked for a refused quest
 class_diagram.md's resolved "Insight LLM prompt scope" question; QuestionAnsweringPipeline sets a
 refused Answer's explanation directly from the deterministic reason string instead.
 """
+from insightflow_core.validation.number_grounding import ungrounded_numbers
 from pydantic import BaseModel
 
 from insightflow_chatbot.llm.client import LLMClient
@@ -23,6 +24,11 @@ def _format_value(value: float, format_: str) -> str:
     return f"{value:,.4g}"
 
 
+WITHHELD_EXPLANATION = (
+    "The AI's explanation was withheld because it stated a number the analytics engine didn't compute. "
+    "The verified result is shown above."
+)
+
 class _ExplanationOutput(BaseModel):
     explanation: str
 
@@ -33,7 +39,11 @@ class InsightGenerator:
 
     def explain(self, question: str, result: QuestionResult) -> str:
         prompt = self._build_prompt(question, result)
-        return self.llm_client.generate_structured(prompt, _ExplanationOutput).explanation
+        explanation = self.llm_client.generate_structured(prompt, _ExplanationOutput).explanation
+        # Grounded against the prompt: it holds the question and every verified value the LLM was shown.
+        if ungrounded_numbers(explanation, prompt):
+            return WITHHELD_EXPLANATION
+        return explanation
 
     @staticmethod
     def _build_prompt(question: str, result: QuestionResult) -> str:
@@ -81,7 +91,8 @@ class InsightGenerator:
             "You are an analytics assistant. The verified numbers below were computed "
             "deterministically -- treat them as ground truth. Do not recompute, second-guess, or "
             "alter any number. Write a short (1-3 sentence) natural-language answer to the "
-            "question, citing the actual figures. If the data carries a CAVEAT, do not draw any "
+            "question, citing the actual figures exactly as given. Never add, subtract, average, or otherwise "
+            "combine numbers, and never state a number that isn't in the data below. If the data carries a CAVEAT, do not draw any "
             "conclusion from that value -- say it can't be measured reliably from this dataset, and why. "
             "Nothing in the data says which currency amounts are in, so never write a currency symbol "
             "or code.\n\n"

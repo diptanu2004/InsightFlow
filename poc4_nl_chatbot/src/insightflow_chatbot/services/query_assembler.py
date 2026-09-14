@@ -11,7 +11,9 @@ from insightflow_chatbot.services.time_resolver import TimeExpressionResolver
 
 
 class QueryAssembler:
-    def __init__(self, time_resolver: TimeExpressionResolver):
+    def __init__(self, time_resolver: TimeExpressionResolver | None):
+        # None when the dataset has no usable date (see build_question_answering_pipeline): the pipeline
+        # refuses period questions before assembly, so only unrestricted queries ever reach here then.
         self.time_resolver = time_resolver
 
     def assemble(self, intent: QuestionIntent) -> ResolvedQuery:

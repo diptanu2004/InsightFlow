@@ -174,6 +174,7 @@ classDiagram
         +resolve_time_filter(expr: TimeExpression) TimeFilter
         +resolve_growth_spec(expr: TimeExpression) GrowthSpec
         -period_bounds(expr: TimeExpression) tuple~date, date~
+        -preceding_calendar_period(expr: TimeExpression, period: TimeFilter) TimeFilter
         -preceding_equal_length_period(period: TimeFilter) TimeFilter
     }
 
@@ -552,10 +553,12 @@ All six resolved in this session, before implementation started:
   demonstrates the fixed enum can't express something actually asked — matches the project's
   evaluation-driven discipline (`hld.md` §8/architecture doc §26) rather than covering a
   hypothetical case speculatively.
-- **`GrowthSpec`'s comparison-period convention — resolved: always immediately-preceding,
-  equal-length.** No planner-selectable QoQ-vs-YoY axis in v1.
-  `TimeExpressionResolver.preceding_equal_length_period` is the only rule, for both plain `GROWTH`
-  and `GROWTH_BY_DIMENSION`. Keeps the planner's job pure classification (pick one of 7 enum
+- **`GrowthSpec`'s comparison-period convention — resolved: always immediately-preceding.** No
+  planner-selectable QoQ-vs-YoY axis in v1. Complete calendar periods (`LAST_MONTH`/`LAST_QUARTER`/
+  `LAST_YEAR`) use `preceding_calendar_period`; to-date and open periods use
+  `preceding_equal_length_period` -- for both plain `GROWTH` and `GROWTH_BY_DIMENSION`. (Revised in
+  Phase 8 M6: equal-length alone misaligned calendar periods of different lengths -- Q2 2018 vs
+  Dec 31-Mar 31 on real Olist data.) Keeps the planner's job pure classification (pick one of 7 enum
   values) rather than adding a second dimension of choice it could get wrong; if a benchmark
   question genuinely needs YoY, add it as its own explicit `TimeExpression` value later (e.g.
   `LAST_QUARTER_YOY`) rather than a free parameter on `GrowthSpec` resolution.

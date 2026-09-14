@@ -24,6 +24,16 @@ _RECENT_MONTHS = 6
 _MIN_HISTORY_MONTHS = 3
 
 
+class NoTimeField(ValueError):
+    """No entity carries the time field -- e.g. the only date column is still awaiting review."""
+
+
+class AmbiguousTimeField(ValueError):
+    def __init__(self, message: str, entities: list[str]):
+        super().__init__(message)
+        self.entities = entities
+
+
 def anchor_date(dates: list[date]) -> date:
     """The date relative periods ("last quarter", growth windows) are measured back from: the latest
     date, after trimming a sparse trailing tail.
@@ -65,11 +75,12 @@ def infer_date_bounds(
     if entity_name is None:
         candidates = [e.name for e in semantic_model.entities if any(f.name == time_field for f in e.fields)]
         if not candidates:
-            raise ValueError(f'no entity in this dataset has a "{time_field}" field to infer date bounds from')
+            raise NoTimeField(f'no entity in this dataset has a "{time_field}" field to infer date bounds from')
         if len(candidates) > 1:
-            raise ValueError(
+            raise AmbiguousTimeField(
                 f'"{time_field}" is on more than one entity ({", ".join(candidates)}), so the date range '
-                "for relative time expressions is ambiguous; set TIME_ENTITY to choose one"
+                "for relative time expressions is ambiguous; set TIME_ENTITY to choose one",
+                candidates,
             )
         entity_name = candidates[0]
 

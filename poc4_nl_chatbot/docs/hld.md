@@ -185,9 +185,12 @@ the full reasoning behind each. Summary:
 - **Closed enum coverage — resolved: ship the 7 values above, no parametric value in v1.**
   `LAST_N_DAYS(n)`-style parametrization deferred until a real benchmark demonstrates the fixed
   enum can't express something actually asked.
-- **`GROWTH`'s comparison period — resolved: always immediately-preceding, equal-length.** No
-  planner-selectable QoQ-vs-YoY choice in v1; add a dedicated enum value later if a benchmark
-  question needs it.
+- **`GROWTH`'s comparison period — resolved: always immediately-preceding.** A complete calendar
+  period (`LAST_MONTH`/`LAST_QUARTER`/`LAST_YEAR`) compares with the calendar period before it; a
+  to-date or open period (`THIS_*`, `ALL_TIME`) with the equal-length window before it. *Revised in
+  Phase 8 M6:* the original equal-length-only rule compared Q2 2018 (91 days) with Dec 31-Mar 31 on
+  real Olist data, because calendar periods differ in length. No planner-selectable QoQ-vs-YoY
+  choice in v1; add a dedicated enum value later if a benchmark question needs it.
 - **Refusal benchmark set — resolved: build it now, alongside the answerable fixtures.** ~15-20
   cases reusing `ASTValidator`'s real rejection codes (unregistered metric, unknown dimension,
   ambiguous dimension, unsupported metric/operation combination), not deferred to a later pass.
