@@ -15,9 +15,16 @@ ASTValidator.
 Depends on the vendored LLMClient ABC (llm/client.py), not GroqLLMClient directly -- tests inject
 a FakeLLMClient instead of making a real Groq call, same pattern POC 1's SemanticMapper uses.
 """
+from insightflow_core.validation.number_grounding import ungrounded_numbers
 from insightflow_dashboard.dashboard.planner_context import PlannerContext
 from insightflow_dashboard.dashboard.spec import DashboardSpec
 from insightflow_dashboard.llm.client import LLMClient
+
+
+WITHHELD_NARRATIVE = (
+    "The planner's summary was withheld because it stated a number the analytics engine didn't compute. "
+    "Every figure in the components below is verified."
+)
 
 
 class DashboardPlanner:
@@ -27,7 +34,17 @@ class DashboardPlanner:
         self.max_components = max_components
 
     def plan(self, context: PlannerContext) -> DashboardSpec:
-        return self.llm_client.generate_structured(self._build_prompt(context), DashboardSpec)
+        prompt = self._build_prompt(context)
+        spec = self.llm_client.generate_structured(prompt, DashboardSpec)
+        # The planner writes its prose before any component is computed, so the only real numbers it has seen
+        # are the diagnostic signals in its prompt. Prose citing any other number is withheld, not trusted --
+        # same check as POC 4's chat explanations (insightflow_core's number_grounding).
+        if ungrounded_numbers(spec.narrative, prompt):
+            spec.narrative = WITHHELD_NARRATIVE
+        for component in spec.components:
+            if ungrounded_numbers(component.rationale, prompt):
+                component.rationale = ""
+        return spec
 
     def _build_prompt(self, context: PlannerContext) -> str:
         metrics_block = "\n".join(f"- {m.name} ({m.kind}): {m.description}" for m in context.available_metrics)
@@ -103,7 +120,9 @@ class DashboardPlanner:
         # SignalGatherer never actually hands this an undefined scalar (it filters those out
         # itself), but branching on `shape` here is still the correct check, not an inference.
         result = signal.result
-        text = f"{result.value:.2f}" if result.shape == "scalar" else str(result.rows)
+        # Four decimals, not two: a growth of -0.1005 shown as "-0.10" made the planner's accurate "fell 10.05%"
+        # ungroundable against what it was shown.
+        text = f"{result.value:,.4f}" if result.shape == "scalar" else str(result.rows)
         if result.caveats:
             return f"{text} [CAVEAT -- do not draw any conclusion from this value: {' '.join(result.caveats)}]"
         return text

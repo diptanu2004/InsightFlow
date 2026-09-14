@@ -168,3 +168,44 @@ def test_caveated_signals_are_marked_and_the_narrative_must_be_grounded_in_signa
     assert "CAVEAT" in signal_line and "0 by construction" in signal_line
     assert "never characterize a metric that isn't listed there" in prompt
     assert "never build a conclusion on it" in prompt
+
+
+def test_a_narrative_citing_a_number_not_in_the_signals_is_withheld(make_fake_llm_client):
+    """The planner writes prose before any component is computed; its only real numbers are the signals."""
+    from insightflow_dashboard.dashboard.planner import WITHHELD_NARRATIVE
+
+    spec = _fixed_spec()
+    spec.narrative = "Revenue of 790 across roughly 1,200 orders shows a healthy business."
+    spec.components[0].rationale = "Revenue is 790, the headline figure."
+    spec.components[1].rationale = "Average basket is about 0.66 per order."
+
+    result = DashboardPlanner(make_fake_llm_client(spec), min_components=3, max_components=8).plan(_sample_context())
+
+    assert result.narrative == WITHHELD_NARRATIVE
+    assert result.components[0].rationale == "Revenue is 790, the headline figure."
+    assert result.components[1].rationale == ""
+
+
+def test_a_narrative_citing_only_signal_values_is_kept(make_fake_llm_client):
+    spec = _fixed_spec()
+    spec.narrative = "Revenue stands at 790 in total, led by the top 2 categories."
+
+    result = DashboardPlanner(make_fake_llm_client(spec), min_components=3, max_components=8).plan(_sample_context())
+
+    assert result.narrative == "Revenue stands at 790 in total, led by the top 2 categories."
+
+
+def test_a_growth_signal_keeps_enough_precision_to_ground_a_percentage(make_fake_llm_client):
+    context = _sample_context()
+    context.signals.append(
+        SignalResult(
+            name="revenue_growth",
+            result=MetricResult(metric_name="revenue_growth", shape="scalar", value=-0.1005, metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1)),
+        )
+    )
+    spec = _fixed_spec()
+    spec.narrative = "Revenue fell 10.05% versus the prior period."
+
+    result = DashboardPlanner(make_fake_llm_client(spec), min_components=3, max_components=8).plan(context)
+
+    assert result.narrative == "Revenue fell 10.05% versus the prior period."
