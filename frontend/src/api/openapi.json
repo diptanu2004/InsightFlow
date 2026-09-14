@@ -529,6 +529,11 @@
       },
       "JobOut": {
         "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "dataset": {
             "anyOf": [
               {
@@ -567,7 +572,8 @@
         "required": [
           "id",
           "project_id",
-          "status"
+          "status",
+          "created_at"
         ],
         "title": "JobOut",
         "type": "object"
@@ -897,6 +903,13 @@
               }
             ],
             "title": "Dimension"
+          },
+          "dimension_values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dimension Values",
+            "type": "array"
           },
           "metric_name": {
             "anyOf": [
@@ -2217,6 +2230,66 @@
           }
         },
         "summary": "Discover Schema",
+        "tags": [
+          "schema"
+        ]
+      }
+    },
+    "/projects/{project_id}/schema/jobs": {
+      "get": {
+        "description": "A project's discovery jobs, newest first.\n\nAdded after Phase 8 M6: the only way to follow a job was the id returned by the upload request,\nheld in page state. A reload mid-discovery lost it, so a job that then failed (a real Groq quota\n429) was never reported -- the page just went back to \"No data yet\". The UI now resumes from here.",
+        "operationId": "list_discovery_jobs_projects__project_id__schema_jobs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobOut"
+                  },
+                  "title": "Response List Discovery Jobs Projects  Project Id  Schema Jobs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Discovery Jobs",
         "tags": [
           "schema"
         ]

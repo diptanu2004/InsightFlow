@@ -115,6 +115,21 @@ export function useAskQuestion(projectId: string | undefined) {
   })
 }
 
+/**
+ * The project's most recent discovery job, fetched once per page load. The upload request's job id lives
+ * only in page state, so this is how a reloaded page finds a job still running -- or one that failed
+ * while nobody was watching (found in the M6 E2E run: the page just went back to "No data yet").
+ * Deliberately not refetched when a job finishes: the page keeps following the job it resumed, so its
+ * "Discovery complete" or failure message stays on screen instead of vanishing.
+ */
+export function useLatestDiscoveryJob(projectId: string | undefined) {
+  return useQuery({
+    queryKey: ['latestDiscoveryJob', projectId],
+    queryFn: async () => (await request<JobOut[]>(`/projects/${projectId}/schema/jobs?limit=1`))[0] ?? null,
+    enabled: projectId !== undefined,
+  })
+}
+
 /** Terminal job states -- polling stops here rather than hammering the route forever. */
 const TERMINAL_JOB_STATUSES = new Set<JobOut['status']>(['done', 'failed'])
 

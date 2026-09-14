@@ -334,6 +334,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/schema/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Discovery Jobs
+         * @description A project's discovery jobs, newest first.
+         *
+         *     Added after Phase 8 M6: the only way to follow a job was the id returned by the upload request,
+         *     held in page state. A reload mid-discovery lost it, so a job that then failed (a real Groq quota
+         *     429) was never reported -- the page just went back to "No data yet". The UI now resumes from here.
+         */
+        get: operations["list_discovery_jobs_projects__project_id__schema_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/schema/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -551,6 +575,11 @@ export interface components {
         };
         /** JobOut */
         JobOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             dataset?: components["schemas"]["DatasetOut"] | null;
             /** Error */
             error?: string | null;
@@ -745,6 +774,8 @@ export interface components {
             answerable: boolean;
             /** Dimension */
             dimension?: string | null;
+            /** Dimension Values */
+            dimension_values?: string[];
             /** Metric Name */
             metric_name?: string | null;
             operation?: components["schemas"]["QuestionOperation"] | null;
@@ -1575,6 +1606,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_discovery_jobs_projects__project_id__schema_jobs_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"][];
                 };
             };
             /** @description Validation Error */

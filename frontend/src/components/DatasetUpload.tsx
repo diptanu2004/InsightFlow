@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { useDiscoveryJob, useUploadDataset } from '../api/queries'
+import { useDatasets, useDiscoveryJob, useLatestDiscoveryJob, useUploadDataset } from '../api/queries'
+import type { DatasetOut, JobOut } from '../api/types'
 
 /**
  * How long a non-terminal job runs before we say something. Discovery on the Olist sample
@@ -10,13 +11,30 @@ import { useDiscoveryJob, useUploadDataset } from '../api/queries'
  */
 const STALL_AFTER_MS = 60_000
 
+/**
+ * A job worth showing on a page that didn't start it: one still in progress, or a failure newer than the
+ * project's newest dataset (an older failure was already superseded by a later successful upload).
+ */
+function jobToResume(latest: JobOut | null | undefined, newestDataset: DatasetOut | undefined, dismissedId: string | null) {
+  if (!latest || latest.id === dismissedId) return null
+  if (latest.status === 'pending' || latest.status === 'running') return latest.id
+  if (latest.status !== 'failed') return null
+  if (newestDataset && new Date(newestDataset.created_at) > new Date(latest.created_at)) return null
+  return latest.id
+}
+
 export default function DatasetUpload({ projectId }: { projectId: string }) {
   const [files, setFiles] = useState<File[]>([])
-  const [jobId, setJobId] = useState<string | null>(null)
+  const [startedJobId, setStartedJobId] = useState<string | null>(null)
+  const [dismissedJobId, setDismissedJobId] = useState<string | null>(null)
   const [hasStalled, setHasStalled] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const upload = useUploadDataset(projectId)
+  const latestJob = useLatestDiscoveryJob(projectId)
+  const datasets = useDatasets(projectId)
+  // The job this page started wins; otherwise pick up the project's latest one after a reload.
+  const jobId = startedJobId ?? jobToResume(latestJob.data, datasets.data?.[0], dismissedJobId)
   const job = useDiscoveryJob(projectId, jobId)
 
   const status = job.data?.status
@@ -39,7 +57,7 @@ export default function DatasetUpload({ projectId }: { projectId: string }) {
     if (files.length === 0) return
     setHasStalled(false)
     const created = await upload.mutateAsync(files)
-    setJobId(created.id)
+    setStartedJobId(created.id)
     setFiles([])
     if (inputRef.current) inputRef.current.value = ''
   }
@@ -111,9 +129,19 @@ export default function DatasetUpload({ projectId }: { projectId: string }) {
           )}
 
           {status === 'failed' && (
-            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              Discovery failed — {job.data?.error ?? 'no error message was recorded'}
-            </p>
+            <div role="alert" className="flex items-start justify-between gap-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+              <p>Discovery failed — {job.data?.error ?? 'no error message was recorded'}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setDismissedJobId(jobId)
+                  setStartedJobId(null)
+                }}
+                className="shrink-0 text-xs font-medium text-red-800 underline-offset-2 hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
           )}
         </div>
       )}

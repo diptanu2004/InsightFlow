@@ -108,9 +108,11 @@ export default function ProjectPage() {
         )}
       </section>
 
-      {activeDataset && projectId && <DashboardSection key={activeDataset.id} projectId={projectId} />}
+      {/* Sibling keys must differ: the same bare dataset id on both made React warn about duplicate keys
+          (caught by the M6 end-to-end run), and duplicates can leave one of them un-remounted. */}
+      {activeDataset && projectId && <DashboardSection key={`dashboard-${activeDataset.id}`} projectId={projectId} />}
 
-      {activeDataset && projectId && <ChatPanel key={activeDataset.id} projectId={projectId} />}
+      {activeDataset && projectId && <ChatPanel key={`chat-${activeDataset.id}`} projectId={projectId} />}
     </div>
   )
 }
