@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
@@ -45,6 +45,7 @@ class JobOut(BaseModel):
     status: JobStatus
     error: str | None = None
     dataset: DatasetOut | None = None
+    created_at: datetime
 
 
 @router.post(
@@ -105,7 +106,21 @@ async def discover_schema(
 
     enqueue_discovery_job(job.id)
 
-    return JobOut(id=job.id, project_id=job.project_id, status=job.status)
+    return _job_out(job, db)
+
+
+def _job_out(job: Job, db: Session) -> JobOut:
+    dataset = None
+    if job.status == JobStatus.DONE:
+        dataset = db.query(Dataset).filter(Dataset.id == job.dataset_id).first()
+    return JobOut(
+        id=job.id,
+        project_id=job.project_id,
+        status=job.status,
+        error=job.error,
+        dataset=DatasetOut.model_validate(dataset) if dataset is not None else None,
+        created_at=job.created_at,
+    )
 
 
 @router.get("/projects/{project_id}/datasets", response_model=list[DatasetOut], tags=["schema"])
@@ -226,6 +241,22 @@ def review_mappings(
     return DatasetOut.model_validate(new_version)
 
 
+@router.get("/projects/{project_id}/schema/jobs", response_model=list[JobOut], tags=["schema"])
+def list_discovery_jobs(
+    limit: int = Query(10, ge=1, le=100),
+    project: Project = Depends(require_project_role(Role.VIEWER)),
+    db: Session = Depends(get_db),
+) -> list[JobOut]:
+    """A project's discovery jobs, newest first.
+
+    Added after Phase 8 M6: the only way to follow a job was the id returned by the upload request,
+    held in page state. A reload mid-discovery lost it, so a job that then failed (a real Groq quota
+    429) was never reported -- the page just went back to "No data yet". The UI now resumes from here.
+    """
+    jobs = db.query(Job).filter(Job.project_id == project.id).order_by(Job.created_at.desc()).limit(limit).all()
+    return [_job_out(job, db) for job in jobs]
+
+
 @router.get("/projects/{project_id}/schema/jobs/{job_id}", response_model=JobOut, tags=["schema"])
 def get_discovery_job(
     job_id: uuid.UUID,
@@ -235,15 +266,4 @@ def get_discovery_job(
     job = db.query(Job).filter(Job.id == job_id, Job.project_id == project.id).first()
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
-
-    dataset = None
-    if job.status == JobStatus.DONE:
-        dataset = db.query(Dataset).filter(Dataset.id == job.dataset_id).first()
-
-    return JobOut(
-        id=job.id,
-        project_id=job.project_id,
-        status=job.status,
-        error=job.error,
-        dataset=DatasetOut.model_validate(dataset) if dataset is not None else None,
-    )
+    return _job_out(job, db)

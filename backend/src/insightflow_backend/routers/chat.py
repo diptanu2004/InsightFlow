@@ -36,10 +36,10 @@ def ask(
         return Answer.model_validate_json(cached)
 
     try:
-        # Building the pipeline can fail on the dataset itself, before any question is asked:
-        # POC 4 infers its date bounds from a configured time entity, which a real upload whose
-        # entities are named after its own files may not have. That's a property of the data,
-        # not a server fault -- report it instead of letting it escape as a raw 500.
+        # Building the pipeline can still fail on the dataset itself (e.g. an explicit TIME_ENTITY that
+        # doesn't exist, or a date column with no rows). That's a property of the data, not a server
+        # fault. A dataset with no usable date at all no longer lands here: chat builds anyway and
+        # refuses only period questions (POC 4's build_question_answering_pipeline).
         chat_pipeline = cache.get_or_build_chat(dataset)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"this dataset can't be queried in chat: {e}")

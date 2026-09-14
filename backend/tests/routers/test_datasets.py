@@ -134,3 +134,52 @@ def test_datasets_are_newest_first_and_scoped_to_their_project(committing_client
     # didn't validate would surface as a 500 here rather than passing through.
     assert body[0]["semantic_model"]["entities"][0]["fields"][0]["confidence"] == 0.42
     assert body[0]["semantic_model"]["relationships"] == []
+
+
+@requires_postgres
+def test_discovery_jobs_are_listed_newest_first_with_their_error(committing_client):
+    """A reload mid-discovery lost the only job id the page had, so a job that then failed was never
+    shown (found in the Phase 8 M6 E2E run, on a real Groq 429). The listing is what the UI resumes from."""
+    from insightflow_backend.db.models import Job, JobStatus
+
+    suffix = uuid.uuid4().hex[:8]
+    token = _register(committing_client, f"owner-jobs-{suffix}@example.com")
+    org, project = _org_and_project(committing_client, token, f"jobs-{suffix}")
+    _, other_project = _org_and_project(committing_client, token, f"jobs-{suffix}-other")
+    user_id = uuid.UUID(committing_client.get("/auth/me", headers=_auth(token)).json()["id"])
+
+    session = SessionLocal()
+    try:
+        for project_id, status, error in [
+            (project["id"], JobStatus.DONE, None),
+            (project["id"], JobStatus.FAILED, "Error code: 429 - tokens per day"),
+            (other_project["id"], JobStatus.RUNNING, None),
+        ]:
+            session.add(
+                Job(
+                    project_id=uuid.UUID(project_id), status=status, error=error, dataset_id=uuid.uuid4(),
+                    dataset_name="orders", storage_prefix="x", filenames=["orders.csv"], created_by=user_id,
+                )
+            )
+            session.commit()
+    finally:
+        session.close()
+
+    r = committing_client.get(f"/projects/{project['id']}/schema/jobs", headers=_auth(token))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [j["status"] for j in body] == ["failed", "done"], "newest first, other projects excluded"
+    assert "429" in body[0]["error"]
+    assert body[0]["created_at"]
+
+    latest = committing_client.get(f"/projects/{project['id']}/schema/jobs?limit=1", headers=_auth(token))
+    assert [j["status"] for j in latest.json()] == ["failed"]
+
+
+@requires_postgres
+def test_non_member_cannot_list_discovery_jobs(client):
+    owner_token = _register(client, "owner-jobs-scoped@example.com")
+    _, project = _org_and_project(client, owner_token, "jobs-scoped")
+    outsider_token = _register(client, "outsider-jobs@example.com")
+
+    assert client.get(f"/projects/{project['id']}/schema/jobs", headers=_auth(outsider_token)).status_code == 403
