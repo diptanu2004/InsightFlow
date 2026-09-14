@@ -10,10 +10,45 @@ SemanticField already encodes (POC 1's own vocabulary), so it reads the exact sa
 column insightflow_core's QueryExecutor.register_sources would.
 """
 import csv
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
+from statistics import median
 
 from insightflow_core.models import SemanticModel
+
+# A trailing month holding less than this share of recent typical volume is treated as the ragged
+# edge of an export, not as business activity. See anchor_date.
+_SPARSE_TAIL_RATIO = 0.10
+_RECENT_MONTHS = 6
+_MIN_HISTORY_MONTHS = 3
+
+
+def anchor_date(dates: list[date]) -> date:
+    """The date relative periods ("last quarter", growth windows) are measured back from: the latest
+    date, after trimming a sparse trailing tail.
+
+    Found on the real Kaggle Olist data: ~6,500 orders a month through August 2018, then 16 in
+    September and 4 in October -- the export simply stops. Anchored on the last stray order
+    (2018-10-17), a dashboard's 90-day growth window was mostly empty months and its narrative
+    reported a "-52%, deteriorating" business; "last quarter" meant a quarter with one real month.
+
+    Rule: walking back from the last month, drop it while it holds under 10% of the median of the up
+    to 6 months before it (only once 3 months of history exist to judge by), and anchor on the last
+    real date of the month that remains. Deliberate tradeoff: a genuine one-month collapse of more
+    than 90% would also be read as a truncated export -- vastly rarer than a cut-off extract, but not
+    impossible. Only the anchor moves; nothing is deleted, and all-time totals still count every row.
+    """
+    by_month = Counter((d.year, d.month) for d in dates)
+    months = sorted(by_month)
+    kept = list(months)
+    while len(kept) > _MIN_HISTORY_MONTHS:
+        recent = [by_month[m] for m in kept[:-1][-_RECENT_MONTHS:]]
+        if by_month[kept[-1]] >= _SPARSE_TAIL_RATIO * median(recent):
+            break
+        kept.pop()
+    last_year, last_month = kept[-1]
+    return max(d for d in dates if (d.year, d.month) == (last_year, last_month))
 
 
 def infer_date_bounds(
@@ -66,4 +101,4 @@ def infer_date_bounds(
 
     if not dates:
         raise ValueError(f'no rows found in "{csv_path}" to infer date bounds from')
-    return min(dates), max(dates)
+    return min(dates), anchor_date(dates)

@@ -56,3 +56,8 @@ def test_growth_metrics_withheld_when_the_measure_entity_has_no_time_field(seman
 
     assert context.growth_metrics == []
     assert "revenue" in context.groupable_metrics
+
+
+def test_context_offers_only_categorical_dimensions(semantic_model, registry):
+    context = build_planner_context(semantic_model, registry, FieldResolver(semantic_model))
+    assert not {"transaction_date", "revenue", "order_id", "customer_id", "product_id"} & set(context.available_dimensions)

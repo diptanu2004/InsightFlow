@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from insightflow_core.compilation import FieldResolver
 from insightflow_core.models import MetricDefinition, MetricKind, SemanticModel
+from insightflow_core.models.semantic_model import planner_dimension_problem
 from insightflow_core.registry import MetricRegistry
 from insightflow_core.compilation.measure_binding import bind_measure
 from insightflow_core.validation.metric_resolvability import resolvable_metric_names
@@ -44,7 +45,11 @@ def build_planner_context(semantic_model: SemanticModel, registry: MetricRegistr
     # Same ambiguity filter as POC 3's _build_planner_context: only offer a dimension the
     # validator would actually accept, using the SAME check (FieldResolver.find_entity_for_field)
     # QuestionValidator's underlying ASTValidator uses.
-    all_field_names = sorted({f.name for e in semantic_model.entities for f in e.fields})
+    # Categorical fields only (insightflow_core's PLANNER_DIMENSION_FIELDS) -- grouping an answer by a
+    # raw timestamp or an amount produces one row per distinct value, not a breakdown.
+    all_field_names = sorted(
+        {f.name for e in semantic_model.entities for f in e.fields if planner_dimension_problem(f.name) is None}
+    )
     dimensions = []
     for name in all_field_names:
         try:

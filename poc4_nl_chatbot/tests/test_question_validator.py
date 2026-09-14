@@ -53,3 +53,18 @@ def test_errors_across_multiple_queries_are_aggregated(question_validator):
     result = question_validator.validate(resolved)
     assert not result.is_valid
     assert len(result.errors) == 2
+
+
+def test_grouping_an_answer_by_a_timestamp_or_amount_is_refused(question_validator):
+    """Phase 8: the first real Olist dashboard grouped by raw timestamps and by price. Grouping a
+    chat answer the same way gives one row per distinct value, not a breakdown."""
+    for dimension in ("transaction_date", "revenue"):
+        query = AnalyticalQuery(operation=OperationType.GROUP_BY, metric="orders", dimension=dimension)
+        result = question_validator.validate(_resolved(query, operation=QuestionOperation.GROUP_BY, dimension=dimension))
+        assert any(e.code == "dimension_not_supported" for e in result.errors), dimension
+
+
+def test_grouping_by_a_category_is_still_accepted(question_validator):
+    query = AnalyticalQuery(operation=OperationType.GROUP_BY, metric="revenue", dimension="category")
+    result = question_validator.validate(_resolved(query, operation=QuestionOperation.GROUP_BY, dimension="category"))
+    assert result.is_valid, result.errors

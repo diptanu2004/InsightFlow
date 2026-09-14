@@ -205,21 +205,13 @@ def test_planner_context_never_offers_category_or_region_as_a_dimension(real_sem
     assert "region" not in context.available_dimensions
 
 
-def test_available_dimensions_is_reduced_to_a_single_continuous_field_not_a_categorical_one(
-    real_semantic_model, real_registry
-):
-    # Real finding, worth documenting rather than working around: in this real (small) Olist
-    # subset, "category"/"region" are excluded for cross-entity ambiguity (see the tests above),
-    # and it turns out order_id/customer_id/product_id are ALSO ambiguous -- each is a foreign key
-    # repeated verbatim across multiple entities (order_id: orders, order_items, payments;
-    # customer_id: orders, customers; product_id: order_items, products), so
-    # FieldResolver.find_entity_for_field rejects them too, for the same reason as
-    # category/region. The one field left standing, "price" (order_items only), is a continuous
-    # numeric field, not a categorical dimension any real business question would GROUP BY --
-    # FieldResolver's ambiguity check has no way to know that; it only answers "does this resolve
-    # to exactly one entity," not "is this a sensible dimension." A real planner LLM could still
-    # be offered "price" as `dimension` and produce a technically-valid but nonsensical GROUP BY
-    # revenue by price. Flagged as a backlog item (a dimension-shaped-field heuristic, or
-    # PlannerContext marking categorical vs. continuous fields), not fixed in this session.
+def test_a_continuous_field_is_never_offered_as_a_dimension(real_semantic_model, real_registry):
+    # In this real (small) Olist subset, "category"/"region" are excluded for cross-entity ambiguity
+    # (see the tests above), and order_id/customer_id/product_id are ambiguous too -- each is a
+    # foreign key repeated across entities. That used to leave "price" (order_items only) as the
+    # sole offered dimension: a continuous number, so a planner could produce a technically valid
+    # but meaningless "revenue by price". This test originally documented that as a backlog gap.
+    # Phase 8 closed it: planners are only offered categorical fields (insightflow_core's
+    # PLANNER_DIMENSION_FIELDS), after the first real Olist dashboard did chart customers by price.
     context = build_planner_context(real_semantic_model, real_registry, FieldResolver(real_semantic_model))
-    assert context.available_dimensions == ["price"]
+    assert context.available_dimensions == []

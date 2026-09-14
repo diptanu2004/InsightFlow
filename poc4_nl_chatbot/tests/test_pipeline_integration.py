@@ -102,3 +102,92 @@ def test_full_growth_by_dimension_pipeline_returns_ranked_category_deltas(
     assert answer.refused is False
     assert answer.result.category_deltas is not None
     assert {d.dimension_value for d in answer.result.category_deltas} == {"Gadgets", "Home"}
+
+
+def test_a_caveated_result_is_explained_deterministically_without_the_insight_llm(
+    semantic_model, registry, engine, make_fake_llm_client
+):
+    """Phase 8: on a real Olist dashboard an LLM told not to draw conclusions from a caveated value
+    did anyway, so a caveated answer's explanation is never left to an LLM."""
+    from insightflow_core.models import MetricResult, QueryMetadata
+
+    from insightflow_chatbot.models.result import QuestionResult
+
+    intent = QuestionIntent(answerable=True, metric_name="repeat_purchase_rate", operation=QuestionOperation.AGGREGATE)
+    insight_llm = make_fake_llm_client(RuntimeError("the insight LLM must not be called for a caveated result"))
+    pipeline = _build_pipeline(semantic_model, registry, engine, make_fake_llm_client(intent), insight_llm)
+    caveat = 'every "customer_id" has at most one "orders_per_customer", so this rate is 0 by construction.'
+
+    class _CaveatedExecutor:
+        def execute(self, resolved):
+            return QuestionResult(
+                metric_result=MetricResult(
+                    metric_name="repeat_purchase_rate",
+                    shape="scalar",
+                    value=0.0,
+                    metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1),
+                    caveats=[caveat],
+                )
+            )
+
+    pipeline.executor = _CaveatedExecutor()
+
+    answer = pipeline.answer("What is our repeat purchase rate?")
+
+    assert answer.refused is False
+    assert insight_llm.last_prompt is None
+    assert caveat in answer.explanation and "can't be interpreted" in answer.explanation
+
+
+def test_an_answer_carries_the_exact_queries_run_and_the_date_it_is_measured_from(
+    semantic_model, registry, engine, make_fake_llm_client
+):
+    """Phase 8 M5: "last quarter" alone doesn't say which quarter. With data through August, it's Q2."""
+    from insightflow_chatbot.services.insight import _ExplanationOutput
+
+    intent = QuestionIntent(
+        answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE, time_expression=TimeExpression.LAST_QUARTER
+    )
+    pipeline = _build_pipeline(
+        semantic_model, registry, engine, make_fake_llm_client(intent), make_fake_llm_client(_ExplanationOutput(explanation="ok"))
+    )
+
+    answer = pipeline.answer("What was revenue last quarter?")
+
+    assert answer.data_through == REFERENCE_DATE
+    assert len(answer.queries) == 1
+    window = answer.queries[0].time_filter
+    assert (window.start_date, window.end_date) == (date(2025, 10, 1), date(2025, 12, 31))
+
+
+def test_a_period_comparison_on_a_cut_off_list_is_refused_not_zero_filled(
+    semantic_model, registry, engine, make_fake_llm_client
+):
+    """Phase 8 M5: ~2,100 Olist cities per quarter against a 1,000-row cap. Zero-filling the cities
+    cut from one list reported Brasilia's 442 orders as '461 -> 0'."""
+    from insightflow_core.models import MetricResult, QueryMetadata
+
+    from insightflow_chatbot.services.executor import QuestionExecutor
+    from insightflow_chatbot.services.result_differ import ResultDiffer
+
+    class _CappedEngine:
+        def run(self, query):
+            rows = [{"region": f"city{i}", "value": 1.0} for i in range(1000)]
+            return MetricResult(
+                metric_name="orders", shape="grouped", rows=rows,
+                metadata=QueryMetadata(sql="...", execution_time_ms=1.0, row_count=1000), truncated=True,
+            )
+
+    intent = QuestionIntent(
+        answerable=True, metric_name="revenue", operation=QuestionOperation.GROWTH_BY_DIMENSION,
+        dimension="region", time_expression=TimeExpression.LAST_QUARTER,
+    )
+    insight_llm = make_fake_llm_client(RuntimeError("must not explain an incomplete comparison"))
+    pipeline = _build_pipeline(semantic_model, registry, engine, make_fake_llm_client(intent), insight_llm)
+    pipeline.executor = QuestionExecutor(_CappedEngine(), ResultDiffer())
+
+    answer = pipeline.answer("Which region's revenue fell the most last quarter?")
+
+    assert answer.refused is True
+    assert "incomplete lists" in answer.reason
+    assert insight_llm.last_prompt is None
