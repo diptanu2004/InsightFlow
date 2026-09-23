@@ -26,3 +26,6 @@ dist-ssr
 # Playwright
 /test-results/
 /playwright-report/
+
+# Output of e2e/dataset-journeys.spec.ts: per-dataset JSON reports and full-page screenshots.
+/e2e-report/

@@ -268,8 +268,7 @@ The spec uses a fresh account each run, so it can be re-run against the same dev
      replaced with a notice that it was withheld. Verified on real Groq across money, counts,
      growth and a 20-row breakdown with no false positives.
 
-   Real filtering by values (so the engine computes such totals) is planned as its own piece of
-   work: it's a new capability in the shared AST and SQL compiler.
+   **Superseded by real filtering (below):** the refusal was a stopgap until the engine could filter.
 
    Follow-ups: the check now lives in insightflow_core (`validation/number_grounding.py`) and also
    covers POC 3's dashboard narrative (withheld) and component rationales (blanked). Its growth
@@ -282,6 +281,209 @@ The spec uses a fresh account each run, so it can be re-run against the same dev
    `GET /projects/{id}/schema/jobs` (newest first, `created_at` on `JobOut`). The upload panel resumes
    the latest job if it's still running, or shows its failure (with Dismiss) if it's newer than the
    project's newest dataset. The E2E test now reloads mid-discovery.
+
+### Filtering by values
+
+`AnalyticalQuery.filters` is a list of `ValueFilter{dimension, values}`. It is supported for every metric kind
+except `having_ratio`, which is refused explicitly so a filter is never silently ignored.
+
+- **Compilation.** Values are bound parameters, compared as trimmed, lower-cased text, so a numeric column
+  such as a postcode still matches `"12209"`. A dimension on a related table is reached through a
+  single-hop semi-join, the same construct as time filters, which can't double-count: the test fixture
+  includes installment payments. A filter two relationships away is refused, as GROUP BY is.
+- **Ratios and growth.** Both sides of a ratio are filtered, so "AOV in SP" is SP revenue over SP orders.
+  Growth compares the filtered population in both periods.
+- **Chat.** The planner extracts `dimension_values` and guesses `filter_dimension`. The pipeline confirms
+  every value against the data (`match_filter_values`), trying the planner's dimension first and then the
+  other dimensions. A value found nowhere is refused ("There's no category called "electronics" in this
+  data (searched the "product_category_name" column)"). Values found under two dimensions are refused as
+  ambiguous. The filter that actually ran, spelled as in the data, is shown in "Interpreted as" and passed
+  to the explanation.
+- **Verified with real Groq on Olist:** "total customers in AL, RN and CE" returns 2,234; SP returns 41,746;
+  RJ and MG return 12,852 and 11,635. All match DuckDB exactly.
+- **Canonical names map to one column per dataset.** On the 5-file project, the mapping review confirmed
+  `customer_city` as region and rejected `customer_state`, so "SP" is correctly not found there. The
+  refusal names the column searched.
+
+### Findings from the real-world test datasets
+
+Test datasets live in `test_datasets/` (git-ignored): jaffle_shop, Northwind, Superstore, UCI Online Retail II,
+and (added for the ten-dataset survey below) Chinook, Maven Pizza Place Sales, ClassicModels
+`sales_data_sample`, Kaggle supermarket sales, and BikeStores.
+
+7. **Superstore: a raw 500 on every dashboard and question.** The downloaded CSV had Superstore's "People"
+   and "Returns" sheets appended below the orders (a header change at line 9,996). pandas-based discovery
+   padded the short rows and succeeded; DuckDB refused the file at query time.
+   - *Fix:* uploads are checked with the engine's own CSV reader before discovery, and fail with "line 9996
+     has 2 columns where the header has 21 ("Person,Region") ... split it into separate CSVs".
+   - Writing the test exposed a quieter failure: with the ragged rows inside DuckDB's sniffing sample, it
+     reads the whole file as one text column without any error. That's now rejected too.
+   - A DuckDB read error at query time, from a dataset uploaded before the check, returns a 422 naming the
+     file and line.
+   - The check also caught a Northwind copy with unquoted commas in addresses. It's kept as
+     `test_datasets/northwind_malformed`, with a valid copy in its place.
+8. **Chat dates were ISO-only.** `infer_date_bounds` used `datetime.fromisoformat`, so Superstore's
+   `11/8/2017` would have broken chat while dashboards worked. It now reads through DuckDB, like the
+   engine. A column that doesn't parse as dates disables period questions with a reason instead of
+   breaking chat.
+9. **Raw floats in explanations.** Grouped rows reached the explanation prompt unformatted ("836154.0329999966").
+   They are now formatted by the registry's display format, like scalar values.
+
+Split Superstore (orders, people, returns), verified with real Groq against DuckDB: revenue 2,297,200.86,
+5,009 orders, Q3 2018 revenue 196,251.96, growth +46.7% versus Q2, and category totals all match.
+
+Still open from this run, not fixed:
+- **`region` refused.** It maps a column on both the orders file and the people file, and a canonical field
+  on two entities is treated as ambiguous, so "revenue by region" is refused.
+- **A false relationship.** Discovery linked `superstore_orders.Customer Name` to `superstore_people.Person`
+  (a regional manager).
+
+### The ten-dataset survey
+
+`e2e/dataset-journeys.spec.ts` walks ten datasets through the whole UI — signup, org, project, upload, real
+schema discovery, an analyst's mapping review, a dashboard, and five questions each — and records what
+happened per dataset instead of stopping at the first failure. It is a survey, not a regression check;
+`olist-journey.spec.ts` remains the sharp one. Ground truth is hand-written DuckDB over the raw CSVs
+(`e2e/ground-truth.py`, results in `e2e/ground-truth.json`), never read back from this system. Output lands in
+`frontend/e2e-report/` (JSON plus full-page screenshots), which is git-ignored.
+
+**What held.** 37 of 37 reported numbers matched ground truth exactly — every dashboard KPI and every chat
+answer across nine datasets (the tenth is a deliberately malformed upload). No number was wrong anywhere, and
+every metric a dataset genuinely could not express was refused rather than approximated. The
+LLM-understands/engine-calculates split did the job it was built for. 1.07 M rows and 94 MB
+(`online_retail_ii`) uploaded and discovered in 13 s, with queries at 3–9 s.
+
+Everything below is a coverage, diagnosis or presentation failure — not an arithmetic one.
+
+10. **`pizza_place_sales`: the product returns nothing at all.** Dashboard `422`, and all five questions
+    refused, on a clean four-table schema with 21,350 orders and a real `category` column. The `orders`
+    measure reads `order_id`, which is on both `orders` and `order_details`; its population hint
+    `customer_id` does not exist anywhere in this dataset, so it cannot narrow the pair and binding refuses.
+    A dataset with no customer identifier therefore loses its *order count* too.
+    - The message the user sees is also untrue: the planner reports "No metric for counting orders is
+      available in the listed metrics." The metric is registered; the binding failed. The planner is handed a
+      metric list that has already had the unbindable ones removed, so it can only describe the symptom.
+    - *Fix shape:* when the hint field is absent from the whole model it cannot discriminate, so fall back
+      rather than refuse — the entity where the field is unique per row is the header table
+      (`orders.order_id` is 21,350 distinct over 21,350 rows; `order_details.order_id` is not). Refusal is
+      right only when the candidates would give different answers.
+11. **A CSV that is not UTF-8 is rejected with a message that never says so.** Two of the five newly added
+    datasets shipped as Windows-1252 — `sales_data_sample.csv` (byte `0x84`, line 29, a Swedish address) and
+    `pizza_types.csv` (byte `0x91`, line 17, "'Nduja Salami"). `check_source_readable` reports
+    `"…" can't be read: Invalid Input Error: CSV Error on Line: 29`, which reads like a ragged-row problem and
+    gives the uploader nothing to act on. Excel on Windows writes cp1252 by default, so this will be common.
+    Originals kept at `test_datasets/_cp1252_originals/`; working copies were transcoded to continue the run.
+    - *Fix shape:* the cheap half is `describe_read_error` recognising the decode failure and naming it
+      ("not UTF-8 — byte 0x84 at line 29; re-save as UTF-8"). The real fix is sniffing the encoding at upload
+      and threading it into `read_csv_sql`, which every reader shares.
+12. **A `m/d/YYYY H:MM` timestamp disables every time-based feature.** `classic_models`' `ORDERDATE` is
+    `2/24/2003 0:00`. DuckDB's sniffer leaves it `VARCHAR`, so `CAST(… AS DATE)` in `infer_date_bounds` raises
+    and chat refuses all period questions ("the ORDERDATE column doesn't read as dates (it mixes formats or
+    holds text)") while all-time totals keep working. The format is perfectly consistent — the message's guess
+    is wrong. Date-only US formats (`11/8/2017`, `1/5/2019`) sniff as `DATE` and are fine; adding a time
+    component is what breaks it. *Fix:* `try_strptime` over a short format list, or pass `timestampformat`.
+13. **`anchor_date`'s sparse-tail trim fails when the tail is gradual.** `bikestores` really ends in April 2018
+    (125 orders); after it come 1, 4, 2, 1, 1, 2, 1 orders per month through December. `anchor_date` returned
+    2018-12-28 — untrimmed. The rule compares the last month against the median of the months *immediately*
+    before it, and those are themselves tail: median of `[1,4,2,1,1,2]` is 1.5, so December's 1 clears the 10 %
+    bar on the first iteration and the loop breaks. Consequence: "last quarter" is a quarter holding 4 orders,
+    and the dashboard narrative reported "Orders and customers have each declined by 33%" for a business that
+    was flat (2018 H1 ≈ 281 orders vs 2017 H1 ≈ 351). This is the same failure Olist's two-month tail motivated
+    the rule for; the rule just doesn't survive a seven-month one.
+    - *Fix shape:* judge each candidate month against a baseline fixed *before* trimming starts (the median of
+      the whole series, or of the months preceding the first dropped month), rather than against the
+      already-degraded window that walks backwards with it.
+14. **Five of ten datasets have no summable revenue column, so revenue, AOV and revenue growth are simply
+    absent.** `pizza_place_sales` (quantity × price), `bikestores` (list_price × quantity × (1−discount)),
+    `northwind` (same shape), `online_retail_ii` (Quantity × Price) — and `superstore`/`chinook`/`classic_models`/
+    `supermarket_sales` only work because someone pre-computed a line total. The refusals are honest and
+    correctly worded, but a line-item schema is the most common e-commerce shape there is. This is the
+    `metrics_catalog.md` B2/B3 work (a measure over an expression, not a column) and it is the single
+    largest gap the survey found.
+15. **A canonical dimension mapped on two entities is refused with a message saying it doesn't exist.**
+    `superstore` (`superstore_orders.Region` 98 % + `superstore_people.Region` 95 %, both auto) and
+    `bikestores` (`customers.state` + `stores.state`, both auto). Chat answers "no region dimension is
+    available", which is false — there are two. Finding 15's superstore case was already known; `bikestores`
+    shows it is not a Superstore quirk. Nothing in the review UI marks the clash or offers to resolve it, and
+    on `superstore` a user who reviews nothing at all lands here by default.
+16. **Discovery maps on column names, not on values.** `northwind`'s `customers.region` — 60 of 91 rows NULL,
+    values mixing `WA`, `Québec`, `Isle of Wight`, `Co. Cork` — mapped to `region` at 90 % and auto-accepted,
+    while `customers.country` (21 clean values) scored 20 % and was left unmapped entirely. The dataset ends up
+    with no usable region dimension. `chinook`'s `Country` mapped at 90 % on the same field, so the signal
+    exists; the name match just outranks it.
+17. **Key columns map to `category` at high confidence.** `categories.categoryID → category` at 95 % (beating
+    `categoryName` at 90 %, which makes the numeric ID the canonical category column for that dataset),
+    `pizzas.pizza_type_id → category` at 90 %, `tracks.GenreId → category` at 85 % — all auto-accepted, none
+    shown to a reviewer. The same `*_id → category` shape recurred on three unrelated datasets.
+18. **False relationships between surrogate keys, with no way to reject one.** `jaffle_shop` produced
+    `raw_customers.id → raw_payments.id` at 95 % and `raw_orders.id → raw_payments.id` at 100 % — two of its
+    four relationships are small-integer range overlaps between unrelated tables. `superstore`'s
+    `Customer Name → Person` link is back at 89 %. The review UI covers fields only: a relationship can be
+    read but not confirmed, rejected or edited, so a wrong join has no path out.
+
+**Dashboard quality.** Every number on these dashboards is right; what is on them often isn't worth showing.
+
+19. **`orders_per_customer` renders as a KPI reading "99".** On `jaffle_shop` it appears under the heading
+    "Orders per customer" showing the total order count (99 orders across 62 customers — the real figure is
+    1.6). It also surfaced as a table on `northwind` and `online_retail_ii`. It is a helper measure for
+    `repeat_purchase_rate`'s GROUP BY and should not be selectable as a component.
+20. **Duplicate components.** `northwind` rendered "Orders by customer name" (bar, top 20) and "Orders per
+    customer by customer name" (table, top 20) side by side with identical rows — Save-a-lot Markets 31, Ernst
+    Handel 30, QUICK-Stop 28. Two of its three non-KPI components were the same query. `chinook` rendered
+    "Revenue by region" and "Orders by region" as two near-identical 20-bar charts.
+21. **`product_name` gets picked as a part-to-whole dimension.** `superstore`'s "Orders by product name" pie
+    degraded to the truncation notice and a list of five products (48, 46, 46, 20, 19 of 5,009 orders, out of
+    1,850 products); `online_retail_ii`'s "Customers by product name" fetched 1,000 truncated rows. The
+    truncation guard behaves correctly — the component should never have been planned.
+22. **Raw floats in planner prose.** "Revenue is highest in Technology (836154.0329999966)", "total revenue of
+    2297200.8603", "growth 0.4472". Finding 9 formatted grouped rows in chat explanations; dashboard narratives
+    and component rationales still carry the unformatted values, and they are the most prominent text on the page.
+23. **Speculative claims, on every dataset with a narrative.** "may mask reliance on new acquisition"
+    (chinook), "growth is driven by existing customers ordering more frequently rather than by acquiring new
+    customers" (northwind), "growth is currently driven by a saturated repeat customer base" (superstore). The
+    numbers are grounded; the causal stories attached to them are not. This is §10's known limitation, now
+    observed on five of six narratives rather than argued about in the abstract.
+24. **A withheld narrative shows an apology where the summary should be.** `online_retail_ii`: "The planner's
+    summary was withheld because it stated a number the analytics engine didn't compute." The guard is right to
+    fire; the top of the dashboard is the wrong place to explain it. Retry once, then omit quietly.
+25. **The page is one long scroll with the least useful thing first.** The mapping table is always above the
+    dashboard and the chat box, so on `chinook` reaching either means scrolling past 42 mapping rows, and
+    rejecting a mapping makes the table *longer* (rejected rows stay full height). Unmapped columns — roughly
+    half the rows, all at 20 % — are never collapsed. Three tabs, or collapsing the model once reviewed, would
+    fix the whole class.
+26. **The review can only accept or reject, never correct.** Where discovery misses a column (`northwind`'s
+    `country`, finding 16) or picks the wrong one of two (finding 17), the reviewer has no way to say what the
+    column actually means, so the dataset stays broken no matter how carefully it is reviewed.
+27. **A provider 503 loses the question.** Groq returned "usage limit has been reached" mid-session on
+    `classic_models`; the turn failed with a red box and no retry. One backoff-and-retry would have hidden it.
+28. **The discovery job prints the provider's raw error, including the Groq organization id.** `main.py`
+    maps `groq.RateLimitError` to a clean 503 ("The AI provider's usage limit has been reached…") — and that
+    is what chat showed in finding 27. But those are *FastAPI exception handlers*, and the discovery job runs
+    in the RQ worker, outside the ASGI app: `jobs.py` catches bare `Exception` and stores `str(e)` on the `Job`
+    row, which `DatasetUpload` renders verbatim. Running out of Groq's daily token budget therefore puts this
+    in front of an Analyst who uploaded a CSV:
+    `Discovery failed — Error code: 429 - {'error': {'message': 'Rate limit reached for model
+    openai/gpt-oss-120b in organization org_01m01wp9peeyh9jzteppjfvt58 service tier on_demand on tokens per
+    day (TPD): Limit 200000, Used 200000 … Upgrade to Dev Tier today at https://console.groq.com/settings/billing'`
+    — an internal provider account identifier and a billing upsell, in a tenant-facing UI.
+    - Found by the Olist rerun at the end of this survey, which exhausted the day's token quota and so could
+      not complete; the failure is environmental, but the way it was displayed is not.
+    - *Fix shape:* the mapping from provider exception to user-facing sentence belongs somewhere both callers
+      share, not in an ASGI handler — `jobs.py` should classify the exception the same way before writing
+      `Job.error`, and a provider quota failure should arguably leave the job retryable rather than `failed`.
+
+One button under the semantic model, shown to Analysts and above only, matching the route's own gate:
+it downloads a Power BI project the reader opens in Power BI Desktop. Nothing Power BI renders appears
+in this app — there are no Power BI licences, so the Service, embedding and the REST API are out
+entirely (`backend/docs/phase9_powerbi.md` §1).
+
+`client.ts` gained `downloadFile`, separate from `request` rather than a flag on it: `request`'s
+contract is "read the body as text, parse JSON, turn non-2xx into an ApiError", and a body can only be
+read once, so a Blob response needs its own path. It keeps the same refresh-on-401 retry.
+
+The component states what the download gives up — caveats, the truncation flag, number grounding and
+this project's roles all stop at the file — in the UI rather than only in the zip's README, because
+that is where the decision to click is made.
 
 ## 10. Known limitations and deliberately deferred items
 
@@ -297,3 +499,5 @@ The spec uses a fresh account each run, so it can be re-run against the same dev
 - **No worker watchdog.** A killed discovery worker leaves its job `running` forever, and the UI
   can only say it's taking longer than expected. `docker-compose.yml` has no restart policies.
 - **`orders_per_customer`** is a helper measure but can surface as its own dashboard table.
+- **The Power BI export has no E2E coverage** and its TMDL has not yet been opened in Desktop —
+  the parity run in `backend/docs/phase9_powerbi.md` §6 is the outstanding check.

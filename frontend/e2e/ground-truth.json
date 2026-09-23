@@ -1,0 +1,330 @@
+{
+  "chinook": {
+    "revenue_invoice_total": 2328.6,
+    "revenue_line_items": 2328.6,
+    "orders": 412,
+    "customers_on_invoices": 59,
+    "customers_on_file": 59,
+    "date_min_max": [
+      [
+        "2021-01-01 00:00:00",
+        "2025-12-22 00:00:00"
+      ]
+    ],
+    "top_country": [
+      [
+        "USA",
+        523.06
+      ],
+      [
+        "Canada",
+        303.96
+      ],
+      [
+        "France",
+        195.1
+      ]
+    ],
+    "aov": 5.6519
+  },
+  "pizza_place_sales": {
+    "revenue_qty_x_price": 817860.05,
+    "sum_price_on_pizzas_only": 1578.3,
+    "orders": 21350,
+    "order_lines": 48620,
+    "customers": "none - dataset has no customer identifier at all",
+    "date_min_max": [
+      [
+        "2015-01-01",
+        "2015-12-31"
+      ]
+    ],
+    "by_category": [
+      [
+        "Classic",
+        220053.1
+      ],
+      [
+        "Supreme",
+        208197.0
+      ],
+      [
+        "Chicken",
+        195919.5
+      ],
+      [
+        "Veggie",
+        193690.45
+      ]
+    ]
+  },
+  "classic_models": {
+    "revenue_sales": 10032628.85,
+    "orders": 307,
+    "customers": 92,
+    "date_min_max": [
+      [
+        "2003-01-06 00:00:00",
+        "2005-05-31 00:00:00"
+      ]
+    ],
+    "by_productline": [
+      [
+        "Classic Cars",
+        3919615.66
+      ],
+      [
+        "Vintage Cars",
+        1903150.84
+      ],
+      [
+        "Motorcycles",
+        1166388.34
+      ],
+      [
+        "Trucks and Buses",
+        1127789.84
+      ],
+      [
+        "Planes",
+        975003.57
+      ],
+      [
+        "Ships",
+        714437.13
+      ],
+      [
+        "Trains",
+        226243.47
+      ]
+    ],
+    "top_country": [
+      [
+        "USA",
+        3627982.83
+      ],
+      [
+        "Spain",
+        1215686.92
+      ],
+      [
+        "France",
+        1110916.52
+      ]
+    ],
+    "aov": 32679.5728
+  },
+  "supermarket_sales": {
+    "revenue_total": 322966.75,
+    "revenue_cogs": 307587.38,
+    "sum_unit_price": 55672.13,
+    "orders": 1000,
+    "customers": "none - only 'Customer type' (Member/Normal), no customer identifier",
+    "date_min_max": "ERROR Binder Error: No function matches the given name and argument types 'strptime(DATE, STRING_LITERAL)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tstrptime(VARCHAR, VARCHAR) -> TI",
+    "by_product_line": [
+      [
+        "Food and beverages",
+        56144.84
+      ],
+      [
+        "Sports and travel",
+        55122.83
+      ],
+      [
+        "Electronic accessories",
+        54337.53
+      ],
+      [
+        "Fashion accessories",
+        54305.9
+      ],
+      [
+        "Home and lifestyle",
+        53861.91
+      ],
+      [
+        "Health and beauty",
+        49193.74
+      ]
+    ],
+    "by_city": [
+      [
+        "Naypyitaw",
+        110568.71
+      ],
+      [
+        "Yangon",
+        106200.37
+      ],
+      [
+        "Mandalay",
+        106197.67
+      ]
+    ],
+    "aov": 322.9667
+  },
+  "bikestores": {
+    "revenue_net": 7689116.56,
+    "revenue_gross_no_discount": 8578988.88,
+    "sum_list_price_only": 5726406.57,
+    "orders": 1615,
+    "customers_with_orders": 1445,
+    "customers_on_file": 1445,
+    "date_min_max": [
+      [
+        "2016-01-01",
+        "2018-12-28"
+      ]
+    ],
+    "by_state": [
+      [
+        "NY",
+        5215751.28
+      ],
+      [
+        "CA",
+        1605823.04
+      ],
+      [
+        "TX",
+        867542.24
+      ]
+    ],
+    "by_category": [
+      [
+        "Mountain Bikes",
+        2715079.53
+      ],
+      [
+        "Road Bikes",
+        1665098.49
+      ],
+      [
+        "Cruisers Bicycles",
+        995032.62
+      ],
+      [
+        "Electric Bikes",
+        916684.78
+      ],
+      [
+        "Cyclocross Bicycles",
+        711011.84
+      ],
+      [
+        "Comfort Bicycles",
+        394020.1
+      ],
+      [
+        "Children Bicycles",
+        292189.2
+      ]
+    ],
+    "aov": 4761.0629
+  },
+  "jaffle_shop": {
+    "revenue_amount_raw": 167200,
+    "orders": 99,
+    "customers_with_orders": 62,
+    "date_min_max": [
+      [
+        "2018-01-01",
+        "2018-04-09"
+      ]
+    ]
+  },
+  "northwind": {
+    "revenue_net": 1265793.04,
+    "revenue_gross": 1354458.59,
+    "sum_unit_price_only": 56500.91,
+    "freight_total": 64942.69,
+    "orders": 830,
+    "customers_with_orders": 89,
+    "date_min_max": [
+      [
+        "1996-07-04 00:00:00",
+        "1998-05-06 00:00:00"
+      ]
+    ],
+    "top_country": [
+      [
+        "USA",
+        122
+      ],
+      [
+        "Germany",
+        122
+      ],
+      [
+        "Brazil",
+        83
+      ]
+    ]
+  },
+  "online_retail_ii": {
+    "revenue_qty_x_price": 19287250.57,
+    "sum_price_only": 4962621.63,
+    "orders": 53628,
+    "customers": 5942,
+    "rows": 1067371,
+    "date_min_max": [
+      [
+        "2009-12-01 07:45:00",
+        "2011-12-09 12:50:00"
+      ]
+    ],
+    "top_country": [
+      [
+        "United Kingdom",
+        16382583.9
+      ],
+      [
+        "EIRE",
+        615519.55
+      ],
+      [
+        "Netherlands",
+        548524.95
+      ]
+    ]
+  },
+  "superstore": {
+    "revenue_sales": 2297200.86,
+    "orders": 5009,
+    "customers": 793,
+    "date_min_max": "ERROR Binder Error: No function matches the given name and argument types 'strptime(DATE, STRING_LITERAL)'. You might need to add explicit type casts.\n\tCandidate functions:\n\tstrptime(VARCHAR, VARCHAR) -> TI",
+    "by_category": [
+      [
+        "Technology",
+        836154.03
+      ],
+      [
+        "Furniture",
+        741999.8
+      ],
+      [
+        "Office Supplies",
+        719047.03
+      ]
+    ],
+    "by_region": [
+      [
+        "West",
+        725457.82
+      ],
+      [
+        "East",
+        678781.24
+      ],
+      [
+        "Central",
+        501239.89
+      ],
+      [
+        "South",
+        391721.91
+      ]
+    ],
+    "aov": 458.6147
+  }
+}
