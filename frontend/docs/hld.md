@@ -550,6 +550,25 @@ What changed, dataset by dataset:
 - Finding **27** (no retry on a provider 429/503) bit twice more during this run — one chat question lost on
   `classic_models` and one on `superstore` — and is still unfixed.
 
+### The third run: finding 29 confirmed, and finding 27 dominating
+
+With finding 29's fix in, `pizza_place_sales` renders a dashboard — one honest KPI reading 21,350 orders,
+matching DuckDB, with no findings at all. That journey has now gone: no dashboard and every question refused
+→ chat working but the dashboard 422 → a dashboard, the order count right, and every refusal honest. The
+canonical `olist-journey.spec.ts` passes clean on the same code, and the backend suite is 142/142 with both
+real-Groq integration tests included. 31 numbers matched ground truth this round; none was wrong.
+
+Seven of the ten journeys were verified on the fixed code. The other three were cut off by Groq's daily
+token ceiling, which three separate keys hit over the course of the survey — the runs themselves are what
+exhaust it.
+
+That cost is worth naming precisely, because it is **finding 27 at full strength**. In one pass, six of ten
+journeys were derailed by transient provider failures: four datasets lost schema discovery outright and
+`bikestores` lost four of its five chat questions, every one to a single 429 or "didn't respond" with no
+retry behind it. Re-running the same six immediately afterwards, unchanged, passed three of them. Nothing
+about those datasets was wrong; the platform simply has no backoff, so one unlucky call loses a whole
+upload. Finding 27 should be read as the most frequently-hit defect in the survey, not a footnote.
+
 One button under the semantic model, shown to Analysts and above only, matching the route's own gate:
 it downloads a Power BI project the reader opens in Power BI Desktop. Nothing Power BI renders appears
 in this app — there are no Power BI licences, so the Service, embedding and the REST API are out
