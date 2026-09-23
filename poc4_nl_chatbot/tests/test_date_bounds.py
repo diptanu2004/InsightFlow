@@ -75,3 +75,32 @@ def test_too_little_history_to_judge_leaves_the_latest_date_alone():
 
     dates = [date(2024, 1, 10)] * 500 + [date(2024, 2, 10)] * 500 + [date(2024, 3, 2)]
     assert anchor_date(dates) == date(2024, 3, 2)
+
+
+def _single_entity_model(column="order_date"):
+    from insightflow_core.models import SemanticModel
+
+    return SemanticModel(
+        entities=[{"name": "sales", "fields": [{"name": "transaction_date", "source_column": column, "source_file": "sales", "confidence": 0.9}]}],
+        relationships=[],
+    )
+
+
+def test_us_formatted_dates_read_the_way_the_engine_reads_them(tmp_path):
+    """Superstore exports "11/8/2017". fromisoformat rejected it, which would have broken chat for the whole
+    dataset while the engine (DuckDB) read the same column fine."""
+    rows = "".join(f"O{i},{m}/{d}/2017\n" for i, (m, d) in enumerate([(m, d) for m in range(1, 13) for d in (3, 17)]))
+    (tmp_path / "sales.csv").write_text("order_id,order_date\n" + rows)
+
+    assert infer_date_bounds(_single_entity_model(), str(tmp_path), None, "transaction_date") == (date(2017, 1, 3), date(2017, 12, 17))
+
+
+def test_a_column_that_does_not_read_as_dates_is_reported_as_such(tmp_path):
+    import pytest
+
+    from insightflow_chatbot.services.date_bounds import UnreadableDates
+
+    (tmp_path / "sales.csv").write_text("order_id,order_date\nO1,2017-01-05\nO2,sometime in March\nO3,2017-02-01\n")
+
+    with pytest.raises(UnreadableDates, match='"order_date" column doesn\'t read as dates'):
+        infer_date_bounds(_single_entity_model(), str(tmp_path), None, "transaction_date")

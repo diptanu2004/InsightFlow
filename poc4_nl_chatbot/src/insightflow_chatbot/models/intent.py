@@ -37,11 +37,12 @@ class QuestionIntent(BaseModel):
     operation: Optional[QuestionOperation] = None
     dimension: Optional[str] = None
     time_expression: Optional[TimeExpression] = None
-    # Specific values the question limits itself to ("customers in AL, RN and CE" -> ["AL", "RN", "CE"]).
-    # The AST can't filter to values yet, so a non-empty list is refused by the pipeline, deterministically.
-    # Asked of the planner as a fact to extract rather than told "refuse these": on real Olist data such a
-    # question was answered with every region's count, and the explanation LLM summed three of them.
+    # Specific values the question limits itself to ("customers in AL, RN and CE" -> ["AL", "RN", "CE"]), and
+    # the dimension the planner thinks they belong to. The pipeline confirms both against the data before
+    # filtering (QuestionAnsweringPipeline._resolve_value_filter) -- the planner's guess is a preference, not
+    # trusted: on real Olist a state code could as easily be taken for a city.
     dimension_values: List[str] = Field(default_factory=list)
+    filter_dimension: Optional[str] = None
 
     @model_validator(mode="after")
     def _shape_matches_answerable(self) -> "QuestionIntent":

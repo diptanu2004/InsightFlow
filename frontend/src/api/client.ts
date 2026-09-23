@@ -148,3 +148,38 @@ export function postJson<T>(path: string, payload: unknown): Promise<T> {
 export function postForm<T>(path: string, form: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body: form })
 }
+
+/**
+ * GET a binary attachment, with the same refresh-on-401 retry as `request`.
+ *
+ * Separate from `request` rather than a flag on it: that helper's whole contract is "read the body
+ * as text, parse it as JSON, turn a non-2xx into an ApiError with its `detail`". A zip has to be
+ * read as a Blob, and reading a body is single-shot — so an error response still gets the JSON
+ * treatment here, while a success never touches `.text()`.
+ */
+export async function downloadFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  let response = await send(path)
+
+  if (response.status === 401) {
+    if (await refreshAccessToken()) {
+      response = await send(path)
+    } else {
+      clearTokens()
+    }
+  }
+
+  if (!response.ok) {
+    const text = await response.text()
+    let body: unknown = null
+    try {
+      body = JSON.parse(text)
+    } catch {
+      throw new ApiError(response.status, text.slice(0, 200))
+    }
+    throw new ApiError(response.status, readDetail(body, response.status))
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="?([^";]+)"?/.exec(disposition)
+  return { blob: await response.blob(), filename: match?.[1] ?? 'download' }
+}

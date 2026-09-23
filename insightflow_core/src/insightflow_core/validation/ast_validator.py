@@ -47,6 +47,8 @@ class ASTValidator:
             errors += self._validate_growth(query)
         if query.having_override is not None:
             errors += self._validate_having_override(query.having_override)
+        if query.filters:
+            errors += self._validate_filters(query)
         errors += self._validate_row_limit(query)
         return ValidationResult(is_valid=not errors, errors=errors)
 
@@ -67,7 +69,7 @@ class ASTValidator:
             return [ValidationError(code="unresolvable_metric", message=reason, field="metric")]
         return []
 
-    def _validate_dimension(self, dimension: str) -> list[ValidationError]:
+    def _validate_dimension(self, dimension: str, field: str = "dimension") -> list[ValidationError]:
         # Checks existence AND entity-level ambiguity — found via the real-dataset integration
         # test: the original version only checked "does this field exist somewhere," which let
         # a genuinely ambiguous dimension (e.g. Olist's "category," mapped into both `products`
@@ -80,7 +82,7 @@ class ASTValidator:
                 ValidationError(
                     code="unknown_dimension",
                     message=f'"{dimension}" is not a known field in the semantic model',
-                    field="dimension",
+                    field=field,
                 )
             ]
         if len(matching_entities) > 1:
@@ -91,7 +93,7 @@ class ASTValidator:
                         f'"{dimension}" exists in more than one entity ({matching_entities}) and '
                         "cannot be used as a dimension without disambiguation"
                     ),
-                    field="dimension",
+                    field=field,
                 )
             ]
         return []
@@ -147,6 +149,38 @@ class ASTValidator:
         if problem is None:
             return []
         return [ValidationError(code="no_join_path", message=problem, field="dimension")]
+
+    def _validate_filters(self, query: AnalyticalQuery) -> list[ValidationError]:
+        """Each filter's dimension must exist unambiguously and be reachable, in one hop, from every entity the
+        metric's measures read -- the same single-hop semi-join SQLCompiler._value_filter_predicate builds."""
+        errors: list[ValidationError] = []
+        for value_filter in query.filters:
+            errors += self._validate_dimension(value_filter.dimension, field="filters")
+        if errors or not self.registry.is_registered(query.metric):
+            return errors
+        resolved = self.registry.resolve(query.metric)
+        if getattr(resolved, "kind", None) == MetricKind.HAVING_RATIO:
+            # Same gap as time_filter: _compile_having_ratio builds its own grouping CTE and applies no row
+            # predicates, so a filter would be silently ignored rather than rejected.
+            return [
+                ValidationError(
+                    code="filters_unsupported_for_metric_kind",
+                    message=f'metric "{query.metric}" is kind=having_ratio; filters are not supported for HAVING_RATIO metrics',
+                    field="filters",
+                )
+            ]
+        try:
+            entities = dict.fromkeys(m.entity for m in bind_metric(resolved, self.registry, self.semantic_model).measures.values())
+        except UnresolvableMeasure:
+            return []  # already reported by _validate_metric
+        resolver = FieldResolver(self.semantic_model)
+        for value_filter in query.filters:
+            dimension_entity = resolver.find_entity_for_field(value_filter.dimension)
+            for entity in entities:
+                problem = join_problem(entity, value_filter.dimension, dimension_entity, self.semantic_model)
+                if problem is not None:
+                    errors.append(ValidationError(code="no_join_path", message=f"can't filter by it: {problem}", field="filters"))
+        return errors
 
     def _validate_time_filter_supported(self, metric: str) -> list[ValidationError]:
         # Same class of gap as _validate_group_by_supported, found the same way (closure sweep,

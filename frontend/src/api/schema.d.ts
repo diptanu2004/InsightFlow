@@ -310,6 +310,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{project_id}/powerbi/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Powerbi
+         * @description Download this project's active dataset as a Power BI project, openable in Power BI Desktop.
+         *
+         *     **Analyst, not Viewer, deliberately.** Every other read route returns numbers the engine computed,
+         *     with caveats, truncation flags and number-grounding checks attached; this one returns the raw rows
+         *     themselves, and once the zip is on a disk none of the project's roles apply to it any more. A
+         *     Viewer may read results here without being able to walk away with the underlying data.
+         *
+         *     Audit-logged despite being a GET, for the same reason: this is a bulk data egress event, which is
+         *     the thing an audit trail most needs to show. `audit.record` only adds the row, so the commit below
+         *     writes it in one transaction, matching every mutating route's pattern.
+         *
+         *     Not cached in `ResultCache`. A dataset is immutable, so the bytes would be stable -- but the CSVs
+         *     are the bulk of them (a real Olist export is ~50 MB), and Redis is not a file store. Rebuilding is
+         *     a few seconds of local DuckDB profiling.
+         */
+        get: operations["export_powerbi_projects__project_id__powerbi_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{project_id}/schema/discover": {
         parameters: {
             query?: never;
@@ -395,6 +428,8 @@ export interface components {
         AnalyticalQuery: {
             /** Dimension */
             dimension?: string | null;
+            /** Filters */
+            filters?: components["schemas"]["ValueFilter"][];
             growth?: components["schemas"]["GrowthSpec"] | null;
             having_override?: components["schemas"]["HavingClause"] | null;
             /** Limit */
@@ -776,6 +811,8 @@ export interface components {
             dimension?: string | null;
             /** Dimension Values */
             dimension_values?: string[];
+            /** Filter Dimension */
+            filter_dimension?: string | null;
             /** Metric Name */
             metric_name?: string | null;
             operation?: components["schemas"]["QuestionOperation"] | null;
@@ -801,6 +838,11 @@ export interface components {
         QuestionResult: {
             /** Category Deltas */
             category_deltas?: components["schemas"]["CategoryDelta"][] | null;
+            /**
+             * Filters
+             * @default []
+             */
+            filters: components["schemas"]["ValueFilter"][];
             /**
              * Format
              * @default number
@@ -923,6 +965,20 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * ValueFilter
+         * @description Keep only rows whose `dimension` equals one of `values` -- "customers in AL, RN and CE".
+         *
+         *     Added in Phase 8: without it chat couldn't answer such a question, and an explanation LLM summed three
+         *     verified per-region counts itself. Every value is a bound parameter; the dimension is checked against the
+         *     semantic model like any other dimension (ASTValidator).
+         */
+        ValueFilter: {
+            /** Dimension */
+            dimension: string;
+            /** Values */
+            values: string[];
         };
     };
     responses: never;
@@ -1571,6 +1627,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatasetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_powerbi_projects__project_id__powerbi_export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A Power BI project (PBIP) and this dataset's CSVs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": unknown;
                 };
             };
             /** @description Validation Error */

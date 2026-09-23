@@ -2,7 +2,9 @@
 (planner output, closed enum for time) into one or two real insightflow_core AnalyticalQuery
 objects, never invented ad hoc downstream.
 """
-from insightflow_core.models import AnalyticalQuery, OperationType
+from collections.abc import Sequence
+
+from insightflow_core.models import AnalyticalQuery, OperationType, ValueFilter
 
 from insightflow_chatbot.models.intent import QuestionIntent, QuestionOperation
 from insightflow_chatbot.models.resolved import ResolvedQuery
@@ -16,13 +18,17 @@ class QueryAssembler:
         # refuses period questions before assembly, so only unrestricted queries ever reach here then.
         self.time_resolver = time_resolver
 
-    def assemble(self, intent: QuestionIntent) -> ResolvedQuery:
+    def assemble(self, intent: QuestionIntent, filters: Sequence[ValueFilter] = ()) -> ResolvedQuery:
+        """`filters` are already confirmed against the data by the pipeline; every query runs with all of them
+        (both periods of a growth_by_dimension comparison alike)."""
         if not intent.answerable:
             raise ValueError("cannot assemble a query from an unanswerable intent")
         if intent.operation == QuestionOperation.GROWTH_BY_DIMENSION:
             queries = self._assemble_growth_by_dimension(intent)
         else:
             queries = [self._assemble_simple(intent)]
+        if filters:
+            queries = [query.model_copy(update={"filters": list(filters)}) for query in queries]
         return ResolvedQuery(intent=intent, queries=queries)
 
     def _resolve_optional_time_filter(self, intent: QuestionIntent):

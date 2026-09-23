@@ -11,9 +11,10 @@ from insightflow_core.models import (
     OperationType,
     SortSpec,
     TimeFilter,
+    ValueFilter,
 )
 from insightflow_core.models.compiled_query import CaveatRule
-from insightflow_core.models.query import HavingClause
+from insightflow_core.models.query import HavingClause, normalize_filter_value
 from insightflow_core.models.registry import AggregationType
 from insightflow_core.registry import MetricRegistry
 
@@ -138,8 +139,7 @@ class SQLCompiler:
             return self._compile_grouped_base(measure, query, params, raw_col)
 
         sql = f'SELECT {agg_sql} AS value FROM "{measure.entity}"'
-        sql = self._apply_time_filter(sql, query.time_filter, measure.entity, params)
-        return sql
+        return self._apply_row_filters(sql, query, measure.entity, params)
 
     def _compile_grouped_base(self, measure: Measure, query: AnalyticalQuery, params: dict, raw_col: str) -> str:
         """GROUP BY path for a bare Measure / BASE-kind metric — split out of `_compile_base`
@@ -166,7 +166,7 @@ class SQLCompiler:
             # No join at all -- nothing here can fan out. Unchanged from before this fix.
             agg_sql = self._render_aggregation(measure.aggregation, raw_col)
             sql = f'SELECT {dim_col} AS "{dimension}", {agg_sql} AS value FROM "{measure.entity}"'
-            sql = self._apply_time_filter(sql, query.time_filter, measure.entity, params)
+            sql = self._apply_row_filters(sql, query, measure.entity, params)
             return f"{sql} GROUP BY {dim_col}"
 
         # Cross-entity: give every row of measure.entity a synthetic, guaranteed-unique row id
@@ -193,7 +193,7 @@ class SQLCompiler:
             f'SELECT "{left_entity}"."{left_col}" AS __join_key, {raw_col} AS __raw_value, '
             f'ROW_NUMBER() OVER () AS __row_id FROM "{measure.entity}"'
         )
-        base_sql = self._apply_time_filter(base_sql, query.time_filter, measure.entity, params)
+        base_sql = self._apply_row_filters(base_sql, query, measure.entity, params)
         outer_agg = self._render_aggregation(measure.aggregation, "deduped.__raw_value")
         return (
             f"WITH base AS ({base_sql}), "
@@ -212,8 +212,7 @@ class SQLCompiler:
         if denominator.entity == numerator.entity:
             entity = numerator.entity
             sql = f'SELECT CAST({num_agg} AS DOUBLE) / NULLIF({den_agg}, 0) AS value FROM "{entity}"'
-            sql = self._apply_time_filter(sql, query.time_filter, entity, params)
-            return sql
+            return self._apply_row_filters(sql, query, entity, params)
 
         # Numerator and denominator live in different entities: each is its own independent
         # scalar subquery (same pattern as _compile_growth below), never a JOINed FROM clause.
@@ -232,8 +231,9 @@ class SQLCompiler:
         # what running the "orders" / "revenue" measures standalone reports; that also removes
         # the need for a join-path between the two entities at all, so a RATIO metric now works
         # even when no `Relationship` connects its numerator and denominator entities.
-        num_where = self._time_filter_predicate(query.time_filter, numerator.entity, params, "num_tf") if query.time_filter else None
-        den_where = self._time_filter_predicate(query.time_filter, denominator.entity, params, "den_tf") if query.time_filter else None
+        # Filters apply to both sides: "AOV in SP" is SP's revenue over SP's orders.
+        num_where = self._row_predicate(query.time_filter, query.filters, numerator.entity, params, "num_tf")
+        den_where = self._row_predicate(query.time_filter, query.filters, denominator.entity, params, "den_tf")
         num_sql = f'(SELECT {num_agg} FROM "{numerator.entity}"' + (f" WHERE {num_where})" if num_where else ")")
         den_sql = f'(SELECT {den_agg} FROM "{denominator.entity}"' + (f" WHERE {den_where})" if den_where else ")")
         return f"SELECT CAST({num_sql} AS DOUBLE) / NULLIF({den_sql}, 0) AS value"
@@ -245,8 +245,8 @@ class SQLCompiler:
         _, agg_sql = self._measure_sql(measure)
         entity = measure.entity
 
-        cur_predicate = self._time_filter_predicate(query.growth.current_period, entity, params, "cur")
-        cmp_predicate = self._time_filter_predicate(query.growth.comparison_period, entity, params, "cmp")
+        cur_predicate = self._row_predicate(query.growth.current_period, query.filters, entity, params, "cur")
+        cmp_predicate = self._row_predicate(query.growth.comparison_period, query.filters, entity, params, "cmp")
 
         cur_sql = f'(SELECT {agg_sql} FROM "{entity}" WHERE {cur_predicate})'
         cmp_sql = f'(SELECT {agg_sql} FROM "{entity}" WHERE {cmp_predicate})'
@@ -379,15 +379,70 @@ class SQLCompiler:
             left_col, right_col = right_col, left_col
         return left_entity, left_col, right_entity, right_col
 
-    def _apply_time_filter(self, sql: str, time_filter: TimeFilter | None, entity: str, params: dict) -> str:
-        if time_filter is None:
+    def _apply_row_filters(self, sql: str, query: AnalyticalQuery, entity: str, params: dict) -> str:
+        predicate = self._row_predicate(query.time_filter, query.filters, entity, params, "tf")
+        if predicate is None:
             return sql
-        predicate = self._time_filter_predicate(time_filter, entity, params, "tf")
         where_sql = f"WHERE {predicate}"
         if " GROUP BY " in sql:
             head, _, tail = sql.partition(" GROUP BY ")
             return f"{head} {where_sql} GROUP BY {tail}"
         return f"{sql} {where_sql}"
+
+    def _row_predicate(
+        self, time_filter: TimeFilter | None, filters: list[ValueFilter], entity: str, params: dict, prefix: str
+    ) -> str | None:
+        """Every row restriction a query places on `entity`'s rows, ANDed -- or None for no restriction."""
+        parts = []
+        if time_filter is not None:
+            parts.append(self._time_filter_predicate(time_filter, entity, params, prefix))
+        for index, value_filter in enumerate(filters):
+            parts.append(self._value_filter_predicate(value_filter, index, entity, params))
+        return " AND ".join(parts) if parts else None
+
+    def _value_filter_predicate(self, value_filter: ValueFilter, index: int, entity: str, params: dict) -> str:
+        dimension_entity = self.field_resolver.find_entity_for_field(value_filter.dimension)
+        if dimension_entity != entity:
+            # The same single-hop semi-join as a time filter on a related table (_time_filter_predicate): it can
+            # keep or drop rows of `entity`, never repeat them, whatever the relationship's cardinality.
+            left_entity, left_col, right_entity, right_col = self._resolve_join(entity, dimension_entity)
+            inner = self._value_filter_predicate(value_filter, index, dimension_entity, params)
+            return (
+                f'"{left_entity}"."{left_col}" IN '
+                f'(SELECT "{right_entity}"."{right_col}" FROM "{right_entity}" WHERE {inner})'
+            )
+        column = self._normalized_column(entity, value_filter.dimension)
+        return f"{column} IN ({self._bind_filter_values(value_filter, index, params)})"
+
+    def _normalized_column(self, entity: str, dimension: str) -> str:
+        loc = self.field_resolver.resolve_field(entity, dimension)
+        # Compared as trimmed, lower-cased text: a filter value is always a string, and a column DuckDB inferred
+        # as a number (a postcode, a numeric store id) must still match "12209" rather than fail on a type error.
+        return f'LOWER(TRIM(CAST("{loc.entity}"."{loc.source_column}" AS VARCHAR)))'
+
+    @staticmethod
+    def _bind_filter_values(value_filter: ValueFilter, index: int, params: dict) -> str:
+        keys = []
+        for position, value in enumerate(value_filter.values):
+            key = f"vf{index}_{position}"
+            params[key] = normalize_filter_value(value)
+            keys.append(f"${key}")
+        return ", ".join(keys)
+
+    def compile_value_lookup(self, value_filter: ValueFilter) -> CompiledQuery:
+        """Which of `value_filter.values` exist in the data, as the data spells them. Lets a caller refuse a
+        filter that matches nothing instead of reporting a confident 0 ("revenue for electronics" where the
+        category is spelled "eletronicos")."""
+        entity = self.field_resolver.find_entity_for_field(value_filter.dimension)
+        loc = self.field_resolver.resolve_field(entity, value_filter.dimension)
+        params: dict = {}
+        column = self._normalized_column(entity, value_filter.dimension)
+        sql = (
+            f'SELECT DISTINCT CAST("{loc.entity}"."{loc.source_column}" AS VARCHAR) AS value FROM "{entity}" '
+            f"WHERE {column} IN ({self._bind_filter_values(value_filter, 0, params)}) "
+            f"LIMIT {int(self.max_row_limit)}"
+        )
+        return CompiledQuery(sql=sql, params=params, result_shape="grouped", row_limit=self.max_row_limit)
 
     def _time_filter_predicate(self, time_filter: TimeFilter, entity: str, params: dict, prefix: str) -> str:
         time_entity = resolve_time_entity(entity, self.TIME_FIELD, self.field_resolver.semantic_model)

@@ -6,6 +6,7 @@ from insightflow_core.models.query import (
     OperationType,
     SortSpec,
     TimeFilter,
+    ValueFilter,
 )
 from insightflow_core.models.registry import AggregationType, Measure, MetricDefinition, MetricKind
 from insightflow_core.models.result import MetricResult, QueryMetadata
@@ -26,6 +27,7 @@ __all__ = [
     "OperationType",
     "SortSpec",
     "TimeFilter",
+    "ValueFilter",
     "AggregationType",
     "Measure",
     "MetricDefinition",

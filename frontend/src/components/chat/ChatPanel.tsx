@@ -43,6 +43,9 @@ function Interpretation({ answer }: { answer: Answer }) {
   const parts = [humanize(intent.metric_name)]
   if (intent.dimension) parts.push(`by ${humanize(intent.dimension).toLowerCase()}`)
   if (intent.operation === 'growth' || intent.operation === 'growth_by_dimension') parts.push('change')
+  // The filter that actually ran, values as spelled in the data -- not the words in the question.
+  const filters = answer.queries?.[0]?.filters ?? []
+  for (const filter of filters) parts.push(`· ${humanize(filter.dimension).toLowerCase()}: ${filter.values.join(', ')}`)
   return (
     <p className="text-xs text-slate-500">
       <span className="font-medium text-slate-600">Interpreted as: </span>

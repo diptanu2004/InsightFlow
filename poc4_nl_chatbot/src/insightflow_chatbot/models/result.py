@@ -6,7 +6,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
-from insightflow_core.models import AnalyticalQuery, MetricResult
+from insightflow_core.models import AnalyticalQuery, MetricResult, ValueFilter
 
 from insightflow_chatbot.models.intent import QuestionIntent
 
@@ -37,6 +37,9 @@ class QuestionResult(BaseModel):
     category_deltas: Optional[List[CategoryDelta]] = None
     # Display format of `category_deltas` values (a metric_result carries its own).
     format: Literal["money", "count", "percent", "number"] = "number"
+    # The value filters every query ran with, values as spelled in the data -- so an explanation can say
+    # "in AL, RN and CE" without being trusted to remember the question.
+    filters: List[ValueFilter] = []
 
 
 class Answer(BaseModel):

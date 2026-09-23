@@ -2,19 +2,20 @@
 is sourced" question: computed once at pipeline construction, not per-question, not wall-clock
 `date.today()`.
 
-Reads the raw source CSV directly rather than going through insightflow_core's engine: the
-engine's AGGREGATE path always casts its result to float (QueryExecutor.execute), so a MIN/MAX
-measure over a date column isn't a fit -- this is a small, self-contained utility scoped to POC 4
-only, not a gap in insightflow_core. Uses the same source_column/source_file resolution
-SemanticField already encodes (POC 1's own vocabulary), so it reads the exact same physical
-column insightflow_core's QueryExecutor.register_sources would.
+Reads the source CSV itself rather than through the engine's AGGREGATE path, which always casts its result
+to float -- but with the engine's own CSV reader (insightflow_core's read_csv_sql), so dates parse exactly as
+queries will parse them. This used to be Python's csv module plus datetime.fromisoformat, which only accepts
+ISO dates: a Superstore export ("11/8/2017", which DuckDB reads fine) would have broken chat for the whole
+dataset while dashboards worked.
 """
-import csv
 from collections import Counter
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from statistics import median
 
+import duckdb
+
+from insightflow_core.execution.query_executor import read_csv_sql
 from insightflow_core.models import SemanticModel
 
 # A trailing month holding less than this share of recent typical volume is treated as the ragged
@@ -26,6 +27,10 @@ _MIN_HISTORY_MONTHS = 3
 
 class NoTimeField(ValueError):
     """No entity carries the time field -- e.g. the only date column is still awaiting review."""
+
+
+class UnreadableDates(ValueError):
+    """The time field's column doesn't parse as dates with the engine's reader."""
 
 
 class AmbiguousTimeField(ValueError):
@@ -49,7 +54,13 @@ def anchor_date(dates: list[date]) -> date:
     than 90% would also be read as a truncated export -- vastly rarer than a cut-off extract, but not
     impossible. Only the anchor moves; nothing is deleted, and all-time totals still count every row.
     """
-    by_month = Counter((d.year, d.month) for d in dates)
+    return _anchor_from_counts(Counter(dates))
+
+
+def _anchor_from_counts(rows_per_day: Counter) -> date:
+    by_month: Counter = Counter()
+    for day, count in rows_per_day.items():
+        by_month[(day.year, day.month)] += count
     months = sorted(by_month)
     kept = list(months)
     while len(kept) > _MIN_HISTORY_MONTHS:
@@ -58,7 +69,7 @@ def anchor_date(dates: list[date]) -> date:
             break
         kept.pop()
     last_year, last_month = kept[-1]
-    return max(d for d in dates if (d.year, d.month) == (last_year, last_month))
+    return max(d for d in rows_per_day if (d.year, d.month) == (last_year, last_month))
 
 
 def infer_date_bounds(
@@ -97,19 +108,22 @@ def infer_date_bounds(
     field = max(matches, key=lambda f: f.confidence)
 
     csv_path = Path(data_dir) / f"{field.source_file}.csv"
-    dates: list[date] = []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            raw = row[field.source_column]
-            if not raw:
-                continue
-            # fromisoformat (not strptime with a fixed format) because real POC 1 output can map
-            # a canonical date field to a full timestamp column (found via this real Olist
-            # dataset: "transaction_date" -> orders.order_purchase_timestamp, "2017-04-11
-            # 12:22:08") as easily as a bare date column -- Python 3.11+'s fromisoformat accepts
-            # both "YYYY-MM-DD" and "YYYY-MM-DD HH:MM:SS" without a format string.
-            dates.append(datetime.fromisoformat(raw).date())
+    column = '"' + field.source_column.replace('"', '""') + '"'
+    con = duckdb.connect(":memory:")
+    try:
+        # Counted per day in SQL: a million-row upload shouldn't become a million Python objects.
+        rows = con.execute(
+            f"SELECT CAST({column} AS DATE) AS day, COUNT(*) FROM ({read_csv_sql(str(csv_path))}) "
+            f"WHERE {column} IS NOT NULL GROUP BY 1"
+        ).fetchall()
+    except duckdb.ConversionException as exc:
+        raise UnreadableDates(
+            f'the "{field.source_column}" column doesn\'t read as dates (it mixes formats or holds text)'
+        ) from exc
+    finally:
+        con.close()
 
-    if not dates:
+    rows_per_day = Counter({day: count for day, count in rows if day is not None})
+    if not rows_per_day:
         raise ValueError(f'no rows found in "{csv_path}" to infer date bounds from')
-    return min(dates), anchor_date(dates)
+    return min(rows_per_day), _anchor_from_counts(rows_per_day)

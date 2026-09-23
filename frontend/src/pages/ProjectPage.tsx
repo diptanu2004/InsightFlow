@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import { useDatasets, useOrganization, useProject } from '../api/queries'
 import { ROLE_LABELS, hasAtLeastRole } from '../auth/roles'
 import DatasetUpload from '../components/DatasetUpload'
+import PowerBIExport from '../components/PowerBIExport'
 import ChatPanel from '../components/chat/ChatPanel'
 import DashboardSection from '../components/dashboard/DashboardSection'
 import SemanticModelView from '../components/SemanticModelView'
@@ -104,6 +105,7 @@ export default function ProjectPage() {
                 canReview={canUpload}
               />
             </div>
+            {canUpload && projectId && <PowerBIExport projectId={projectId} />}
           </div>
         )}
       </section>

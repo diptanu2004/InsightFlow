@@ -6,6 +6,7 @@ about the listing contract -- ordering, scoping, and that a stored semantic mode
 against the now-typed DatasetOut.semantic_model -- so Dataset rows are written directly.
 """
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from insightflow_backend.db.models import Dataset
 from insightflow_backend.db.session import SessionLocal
@@ -96,9 +97,9 @@ def test_datasets_are_newest_first_and_scoped_to_their_project(committing_client
 
     session = SessionLocal()
     try:
-        for name, field, confidence in [
-            ("first upload", "revenue", 0.91),
-            ("second upload", "net_revenue", 0.42),
+        for minutes, name, field, confidence in [
+            (0, "first upload", "revenue", 0.91),
+            (1, "second upload", "net_revenue", 0.42),
         ]:
             session.add(
                 Dataset(
@@ -107,9 +108,11 @@ def test_datasets_are_newest_first_and_scoped_to_their_project(committing_client
                     storage_prefix=f"{org['id']}/{project['id']}/{name}",
                     semantic_model=_semantic_model(field, confidence),
                     created_by=user_id,
+                    # Explicit: back-to-back inserts can share a clock tick on Windows.
+                    created_at=datetime(2026, 1, 1, tzinfo=timezone.utc) + timedelta(minutes=minutes),
                 )
             )
-            session.commit()  # separate commits so created_at ordering is unambiguous
+            session.commit()
         session.add(
             Dataset(
                 project_id=uuid.UUID(other_project["id"]),
@@ -150,15 +153,19 @@ def test_discovery_jobs_are_listed_newest_first_with_their_error(committing_clie
 
     session = SessionLocal()
     try:
-        for project_id, status, error in [
-            (project["id"], JobStatus.DONE, None),
-            (project["id"], JobStatus.FAILED, "Error code: 429 - tokens per day"),
-            (other_project["id"], JobStatus.RUNNING, None),
+        # Explicit timestamps: rows inserted back to back can share a clock tick on Windows, which made the
+        # newest-first assertion flaky.
+        base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for minutes, project_id, status, error in [
+            (0, project["id"], JobStatus.DONE, None),
+            (1, project["id"], JobStatus.FAILED, "Error code: 429 - tokens per day"),
+            (2, other_project["id"], JobStatus.RUNNING, None),
         ]:
             session.add(
                 Job(
                     project_id=uuid.UUID(project_id), status=status, error=error, dataset_id=uuid.uuid4(),
                     dataset_name="orders", storage_prefix="x", filenames=["orders.csv"], created_by=user_id,
+                    created_at=base + timedelta(minutes=minutes),
                 )
             )
             session.commit()

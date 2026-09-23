@@ -35,7 +35,10 @@ import redis
 #  11 -- Phase 8 M6: growth over last month/quarter/year compares with the preceding calendar period.
 #  12 -- Phase 8 M6: value-limited questions refused; explanations with ungrounded numbers withheld.
 #  13 -- Phase 8 M6: dashboard narratives/rationales with ungrounded numbers withheld; refusals name dimensions.
-COMPUTATION_VERSION = 13
+#  14 -- Phase 8: questions limited to specific values are computed with engine value filters.
+#  15 -- Phase 8: a missing filter value's refusal names the column searched.
+#  16 -- Phase 8: chat dates read with the engine's CSV reader; grouped values formatted for explanations.
+COMPUTATION_VERSION = 16
 
 
 def build_cache_key(dataset_id, route: str, payload: dict) -> str:

@@ -29,6 +29,13 @@ WITHHELD_EXPLANATION = (
     "The verified result is shown above."
 )
 
+def _filters_line(result: QuestionResult) -> str:
+    if not result.filters:
+        return ""
+    parts = [f"{f.dimension.replace('_', ' ')} is one of: {', '.join(f.values)}" for f in result.filters]
+    return "\nThese figures cover only rows where " + "; and ".join(parts) + "."
+
+
 class _ExplanationOutput(BaseModel):
     explanation: str
 
@@ -67,7 +74,14 @@ class InsightGenerator:
                 # and the provider rejected it. The largest groups come first (the engine orders grouped
                 # results by value), and the reader of the prompt is told what's left out.
                 shown = mr.rows[:_MAX_ROWS_IN_PROMPT]
-                rows_block = "\n".join(f"- {row}" for row in shown)
+                # Values formatted like a scalar's: raw floats reached a real Superstore explanation verbatim
+                # ("Technology ... 836154.0329999966").
+                rows_block = "\n".join(
+                    "- "
+                    + ", ".join(f"{key}: {value}" for key, value in row.items() if key != "value")
+                    + (f" = {_format_value(row['value'], mr.format)}" if isinstance(row.get("value"), (int, float)) else "")
+                    for row in shown
+                )
                 hidden = len(mr.rows) - len(shown)
                 data_block = f"{mr.metric_name}, broken down by group (largest first):\n{rows_block}"
                 if hidden > 0 or mr.truncated:
@@ -79,6 +93,7 @@ class InsightGenerator:
             if mr.caveats:
                 # Stated by the engine, not inferred -- see insightflow_core's MetricResult.caveats.
                 data_block += "\nCAVEAT: " + " ".join(mr.caveats)
+            data_block += _filters_line(result)
         else:
             deltas_block = "\n".join(
                 f"- {d.dimension_value}: {d.comparison_value} -> {d.current_value} "
@@ -86,6 +101,7 @@ class InsightGenerator:
                 for d in result.category_deltas
             )
             data_block = f"Per-category change between the two periods, most-declined first:\n{deltas_block}"
+            data_block += _filters_line(result)
 
         return (
             "You are an analytics assistant. The verified numbers below were computed "

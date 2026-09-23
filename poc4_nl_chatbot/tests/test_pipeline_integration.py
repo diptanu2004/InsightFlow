@@ -257,35 +257,86 @@ def test_a_dataset_without_a_date_column_refuses_period_questions_with_a_reason(
     assert answer.result is None
 
 
-def test_a_question_limited_to_specific_values_is_refused_before_anything_runs(semantic_model, registry, make_fake_llm_client):
+class _ByCall:
+    """Planner output first, explanation second -- the wired pipeline shares one client."""
+
+    def __init__(self, intent, explanation="x"):
+        self.intent, self.explanation, self.prompts = intent, _ExplanationOutput(explanation=explanation), []
+
+    def generate_structured(self, prompt, output_schema):
+        self.prompts.append(prompt)
+        return self.intent if output_schema is QuestionIntent else self.explanation
+
+
+def _filtered_pipeline(semantic_model, registry, engine, llm):
+    from insightflow_chatbot.services.insight import InsightGenerator
+
+    return QuestionAnsweringPipeline(
+        semantic_model=semantic_model, registry=registry, engine=engine, planner=QuestionPlanner(llm),
+        assembler=QueryAssembler(TimeExpressionResolver(reference_date=REFERENCE_DATE, min_date=MIN_DATE)),
+        validator=QuestionValidator(ASTValidator(registry, semantic_model, 1000)),
+        executor=QuestionExecutor(engine, ResultDiffer()), insight_generator=InsightGenerator(llm),
+    )
+
+
+def test_a_total_over_specific_values_is_computed_by_the_engine(semantic_model, registry, engine):
+    """Real Olist: "total customers in AL, RN and CE" was answered with every region and summed by the LLM."""
     intent = QuestionIntent(
-        answerable=True, metric_name="customers", operation=QuestionOperation.GROUP_BY, dimension="region",
-        dimension_values=["AL", "RN", "CE"],
+        answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE, dimension_values=["north"], filter_dimension="region"
+    )
+    llm = _ByCall(intent, explanation="Revenue in the North region is 380.")
+
+    answer = _filtered_pipeline(semantic_model, registry, engine, llm).answer("What is revenue in the north?")
+
+    assert answer.refused is False
+    assert answer.result.metric_result.value == 380.0  # C1's three orders + C3's one
+    assert [(f.dimension, f.values) for f in answer.queries[0].filters] == [("region", ["North"])]  # as spelled in the data
+    assert answer.explanation == "Revenue in the North region is 380."
+    assert "only rows where region is one of: North" in llm.prompts[-1]
+
+
+def test_the_planners_guess_of_dimension_is_checked_against_the_data(semantic_model, registry, engine):
+    intent = QuestionIntent(
+        answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE, dimension_values=["North"], filter_dimension="category"
     )
 
-    class _NeverRuns:
-        def run(self, query):
-            raise AssertionError("a value-filtered question must not execute")
+    answer = _filtered_pipeline(semantic_model, registry, engine, _ByCall(intent)).answer("revenue for North?")
 
-    pipeline = _build_pipeline(
-        semantic_model, registry, _NeverRuns(), make_fake_llm_client(intent), make_fake_llm_client(RuntimeError("no insight call"))
+    assert answer.refused is False
+    assert answer.queries[0].filters[0].dimension == "region"
+    assert answer.result.metric_result.value == 380.0
+
+
+def test_a_value_missing_from_the_named_dimension_is_refused_not_reported_as_zero(semantic_model, registry, engine):
+    intent = QuestionIntent(
+        answerable=True, metric_name="revenue", operation=QuestionOperation.AGGREGATE,
+        dimension_values=["North", "Atlantis"], filter_dimension="region",
     )
 
-    answer = pipeline.answer("what is the total customers in AL, RN and CE")
+    answer = _filtered_pipeline(semantic_model, registry, engine, _ByCall(intent)).answer("revenue in North and Atlantis?")
 
     assert answer.refused is True
-    assert "AL, RN, CE" in answer.reason
-    assert "customers by region" in answer.reason
+    assert answer.reason.startswith('There\'s no region called "Atlantis" in this data (searched the "region" column)')
     assert answer.result is None
 
 
-def test_a_value_limited_aggregate_names_the_dimensions_it_could_be_broken_down_by(semantic_model, registry, engine, make_fake_llm_client):
-    """"How many customers are in SP?" planned as a plain aggregate said "by the relevant dimension"."""
-    intent = QuestionIntent(answerable=True, metric_name="customers", operation=QuestionOperation.AGGREGATE, dimension_values=["SP"])
-    pipeline = _build_pipeline(semantic_model, registry, engine, make_fake_llm_client(intent), make_fake_llm_client(RuntimeError("no insight call")))
+def test_a_value_found_nowhere_names_the_dimensions_searched(semantic_model, registry, engine):
+    intent = QuestionIntent(answerable=True, metric_name="orders", operation=QuestionOperation.AGGREGATE, dimension_values=["Atlantis"])
 
-    answer = pipeline.answer("How many customers are in SP?")
+    answer = _filtered_pipeline(semantic_model, registry, engine, _ByCall(intent)).answer("orders in Atlantis?")
 
     assert answer.refused is True
-    assert "relevant dimension" not in answer.reason
-    assert "customers by " in answer.reason and "region" in answer.reason
+    assert 'Couldn\'t find "Atlantis" in any of:' in answer.reason and "region" in answer.reason
+
+
+def test_a_period_comparison_is_filtered_in_both_periods(semantic_model, registry, engine):
+    intent = QuestionIntent(
+        answerable=True, metric_name="revenue", operation=QuestionOperation.GROWTH_BY_DIMENSION, dimension="region",
+        time_expression=TimeExpression.LAST_QUARTER, dimension_values=["Gadgets"], filter_dimension="category",
+    )
+
+    answer = _filtered_pipeline(semantic_model, registry, engine, _ByCall(intent)).answer("Which region's gadget revenue fell last quarter?")
+
+    assert answer.refused is False
+    assert all(q.filters and q.filters[0].values == ["Gadgets"] for q in answer.queries)
+    assert len(answer.queries) == 2

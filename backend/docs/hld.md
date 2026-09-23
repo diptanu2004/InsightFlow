@@ -94,3 +94,19 @@ POST /chat/ask               -> ResultCache check -> QuestionAnsweringPipeline.a
   `running` forever, confirmed by actually killing a real worker container mid-discovery-call
   and observing the stuck row. No heartbeat/staleness-reconciliation mechanism exists yet to
   reclaim it; that's explicitly deferred, not solved by this phase.
+
+## Phase 9 addition (Power BI export)
+
+One new route, `GET /projects/{project_id}/powerbi/export`, returning a zip: a Power BI project
+(PBIP/TMDL) generated from the dataset's trusted semantic model and the metric registry, plus the
+dataset's own CSVs and a README. It is opened in Power BI Desktop; nothing Power BI renders appears
+in this product, and no Power BI Service, embedding or REST API is involved (no licences exist for
+them — see `phase9_powerbi.md` §1).
+
+It differs from every other read route in two ways, both deliberate: it requires **Analyst**, not
+Viewer, and it writes an `audit_log` row despite being a GET. Both follow from what it returns —
+raw rows in bulk, outside the platform, where caveats, truncation flags, number-grounding checks and
+project roles no longer apply.
+
+Code: `insightflow_backend/powerbi/{ir,build,dax,tmdl,export}.py`. Full design and the parity
+procedure: `phase9_powerbi.md`.

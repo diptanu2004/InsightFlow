@@ -83,6 +83,16 @@ class PipelineCache:
             self._entries.popitem(last=False)
         return entry
 
+    def get_data_dir(self, dataset: Dataset) -> Path:
+        """This dataset's source CSVs as local files, materializing them if needed.
+
+        For callers that need the files themselves rather than a pipeline over them -- the Power BI
+        export, which reads them to profile column types and relationship cardinality and then ships
+        them in the zip. Goes through the same entry as every pipeline so a dataset is downloaded
+        once, not once per consumer.
+        """
+        return self._get_entry(dataset).data_dir
+
     def get_or_build_engine(self, dataset: Dataset) -> AnalyticsEnginePipeline:
         entry = self._get_entry(dataset)
         if entry.engine is None:

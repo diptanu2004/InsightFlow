@@ -161,3 +161,14 @@ def test_a_category_delta_explanation_may_state_the_change_as_a_percentage(make_
     llm = make_fake_llm_client(_ExplanationOutput(explanation=explanation))
 
     assert InsightGenerator(llm).explain("Which category declined?", QuestionResult(category_deltas=deltas)) == explanation
+
+
+def test_grouped_values_reach_the_explanation_formatted_not_as_raw_floats():
+    """Real Superstore: "Technology has the most revenue, with a value of 836154.0329999966"."""
+    rows = [{"category": "Technology", "value": 836154.0329999966}, {"category": "Furniture", "value": 741999.7952999998}]
+    result = QuestionResult(metric_result=MetricResult(metric_name="revenue", shape="grouped", rows=rows, format="money", metadata=_metadata()))
+
+    prompt = InsightGenerator._build_prompt("Which category has the most revenue?", result)
+
+    assert "- category: Technology = 836,154.03" in prompt
+    assert "0329999966" not in prompt

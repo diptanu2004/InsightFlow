@@ -33,6 +33,13 @@
             ],
             "title": "Dimension"
           },
+          "filters": {
+            "items": {
+              "$ref": "#/components/schemas/ValueFilter"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
           "growth": {
             "anyOf": [
               {
@@ -911,6 +918,17 @@
             "title": "Dimension Values",
             "type": "array"
           },
+          "filter_dimension": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Dimension"
+          },
           "metric_name": {
             "anyOf": [
               {
@@ -987,6 +1005,14 @@
               }
             ],
             "title": "Category Deltas"
+          },
+          "filters": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValueFilter"
+            },
+            "title": "Filters",
+            "type": "array"
           },
           "format": {
             "default": "number",
@@ -1266,6 +1292,30 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValueFilter": {
+        "description": "Keep only rows whose `dimension` equals one of `values` -- \"customers in AL, RN and CE\".\n\nAdded in Phase 8: without it chat couldn't answer such a question, and an explanation LLM summed three\nverified per-region counts itself. Every value is a bound parameter; the dimension is checked against the\nsemantic model like any other dimension (ASTValidator).",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dimension",
+          "values"
+        ],
+        "title": "ValueFilter",
         "type": "object"
       }
     }
@@ -2178,6 +2228,46 @@
         "summary": "Review Mappings",
         "tags": [
           "schema"
+        ]
+      }
+    },
+    "/projects/{project_id}/powerbi/export": {
+      "get": {
+        "description": "Download this project's active dataset as a Power BI project, openable in Power BI Desktop.\n\n**Analyst, not Viewer, deliberately.** Every other read route returns numbers the engine computed,\nwith caveats, truncation flags and number-grounding checks attached; this one returns the raw rows\nthemselves, and once the zip is on a disk none of the project's roles apply to it any more. A\nViewer may read results here without being able to walk away with the underlying data.\n\nAudit-logged despite being a GET, for the same reason: this is a bulk data egress event, which is\nthe thing an audit trail most needs to show. `audit.record` only adds the row, so the commit below\nwrites it in one transaction, matching every mutating route's pattern.\n\nNot cached in `ResultCache`. A dataset is immutable, so the bytes would be stable -- but the CSVs\nare the bulk of them (a real Olist export is ~50 MB), and Redis is not a file store. Rebuilding is\na few seconds of local DuckDB profiling.",
+        "operationId": "export_powerbi_projects__project_id__powerbi_export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {}
+            },
+            "description": "A Power BI project (PBIP) and this dataset's CSVs."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Powerbi",
+        "tags": [
+          "powerbi"
         ]
       }
     },

@@ -1,6 +1,7 @@
 from insightflow_core.compilation import FieldResolver, SQLCompiler
 from insightflow_core.execution import QueryExecutor
-from insightflow_core.models import AnalyticalQuery, MetricResult, SemanticModel
+from insightflow_core.models import AnalyticalQuery, MetricResult, SemanticModel, ValueFilter
+from insightflow_core.models.query import normalize_filter_value
 from insightflow_core.registry import MetricRegistry
 from insightflow_core.safety import SQLSafetyChecker
 from insightflow_core.validation import ASTValidator
@@ -46,6 +47,26 @@ class AnalyticsEnginePipeline:
         result = self.executor.execute(compiled, query.metric)
         result.format = self.registry.resolve(query.metric).format
         return result
+
+    def match_filter_values(self, value_filter: ValueFilter) -> dict[str, str | None]:
+        """Each requested value -> the value as spelled in the data, or None if no row has it.
+
+        Compared the way filters are applied (trimmed, case-insensitive). A filter on a value that isn't there
+        computes a confident 0; callers use this to refuse or correct it first. Same validate -> compile ->
+        check -> execute path as run().
+        """
+        errors = self.validator._validate_dimension(value_filter.dimension, field="filters")
+        if errors:
+            raise ValueError(f"invalid filter: {[e.message for e in errors]}")
+        compiled = self.compiler.compile_value_lookup(value_filter)
+        check = self.checker.check(compiled)
+        if not check.is_safe:
+            raise ValueError(f"compiled SQL failed safety check: {check.violations}")
+        found: dict[str, str] = {}
+        for row in self.executor.fetch_rows(compiled):
+            if row["value"] is not None:
+                found.setdefault(normalize_filter_value(row["value"]), row["value"])
+        return {value: found.get(normalize_filter_value(value)) for value in value_filter.values}
 
 
 def build_pipeline(

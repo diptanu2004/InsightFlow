@@ -1,3 +1,5 @@
+import csv
+import re
 import time
 from collections import Counter
 from pathlib import Path
@@ -5,6 +7,70 @@ from pathlib import Path
 import duckdb
 
 from insightflow_core.models import CompiledQuery, MetricResult, QueryMetadata, SemanticModel
+
+
+class UnreadableSource(ValueError):
+    """A source file the engine can't read as one table."""
+
+
+def read_csv_sql(csv_path: str) -> str:
+    """The one way the engine reads a source CSV -- shared by register_sources' views and check_source_readable,
+    so a file that passes the check is exactly a file the engine can query."""
+    escaped_path = csv_path.replace("'", "''")
+    return f"SELECT * FROM read_csv_auto('{escaped_path}')"
+
+
+def check_source_readable(csv_path: str) -> None:
+    """Read the whole file the way queries will, and raise UnreadableSource with a plain reason if that fails.
+
+    Found on a real upload: a Superstore export with its "People" and "Returns" sheets appended below the
+    orders table. Schema discovery reads files with pandas, which pads short rows with blanks, so discovery
+    succeeded -- and every query then failed in DuckDB with a raw 500. Checking with the engine's own reader
+    before discovery turns that into an upload error the uploader can act on.
+    """
+    con = duckdb.connect(":memory:")
+    try:
+        con.execute(f"SELECT COUNT(*) FROM ({read_csv_sql(csv_path)})").fetchone()
+        column_count = len(con.execute(f"DESCRIBE {read_csv_sql(csv_path)}").fetchall())
+    except duckdb.Error as exc:
+        raise UnreadableSource(describe_read_error(Path(csv_path).name, exc)) from exc
+    finally:
+        con.close()
+
+    # The silent version of the same problem: when ragged rows fall inside DuckDB's sniffing sample, it doesn't
+    # error -- it decides the file has no delimiter and reads every line as one text column (found writing the
+    # test for the appended-table case). A header that plainly has several fields can't be a one-column table.
+    header_fields = _header_field_count(csv_path)
+    if column_count == 1 and header_fields > 1:
+        raise UnreadableSource(
+            f'"{Path(csv_path).name}" can\'t be read as a single table: its rows don\'t all have the {header_fields} '
+            "columns its header has. If the file holds more than one table or a summary block, split it into "
+            "separate CSVs before uploading."
+        )
+
+
+def _header_field_count(csv_path: str) -> int:
+    with open(csv_path, newline="", encoding="utf-8", errors="replace") as f:
+        header = next((line for line in f if line.strip()), "")
+    delimiter = max(",;\t|", key=header.count)
+    return len(next(csv.reader([header], delimiter=delimiter), [])) if header.count(delimiter) else 1
+
+
+def describe_read_error(file_name: str, exc: Exception) -> str:
+    """DuckDB's CSV errors run to twenty lines of parser settings; keep what a person can act on."""
+    text = str(exc)
+    line = re.search(r"CSV Error on Line: (\d+)", text)
+    columns = re.search(r"Expected Number of Columns: (\d+) Found: (\d+)", text)
+    original = re.search(r"Original Line:\s*\n(.*)", text)
+    if line and columns:
+        snippet = f' ("{original.group(1).strip()[:80]}")' if original and original.group(1).strip() else ""
+        return (
+            f'"{file_name}" can\'t be read as a single table: line {line.group(1)} has {columns.group(2)} columns '
+            f"where the header has {columns.group(1)}{snippet}. If the file holds more than one table or a summary "
+            "block, split it into separate CSVs before uploading."
+        )
+    first_line = text.strip().splitlines()[0] if text.strip() else type(exc).__name__
+    return f'"{file_name}" can\'t be read: {first_line}'
 
 
 class QueryExecutor:
@@ -53,11 +119,10 @@ class QueryExecutor:
                 continue
             source_file = Counter(f.source_file for f in entity.fields).most_common(1)[0][0]
             csv_path = str(Path(data_dir) / f"{source_file}.csv")
-            escaped_path = csv_path.replace("'", "''")
             # csv_path comes from server config (data_dir) + the semantic model, both trusted
             # inputs at pipeline-construction time — not from the AST/user query — so inlining
             # it here is a different trust boundary than SQLCompiler's identifier handling.
-            self._con.execute(f'CREATE OR REPLACE VIEW "{entity.name}" AS SELECT * FROM read_csv_auto(\'{escaped_path}\')')
+            self._con.execute(f'CREATE OR REPLACE VIEW "{entity.name}" AS {read_csv_sql(csv_path)}')
 
     def execute(self, compiled: CompiledQuery, metric_name: str) -> MetricResult:
         start = time.perf_counter()
@@ -87,6 +152,10 @@ class QueryExecutor:
             # it as "may be incomplete", which is the only safe reading.
             truncated=compiled.row_limit > 0 and len(rows) >= compiled.row_limit,
         )
+
+    def fetch_rows(self, compiled: CompiledQuery) -> list[dict]:
+        """Raw rows for a checked lookup query (e.g. SQLCompiler.compile_value_lookup) that isn't a metric."""
+        return self._enforce_row_cap(self._run_with_timeout(compiled.sql, compiled.params))
 
     def _run_with_timeout(self, sql: str, params: dict) -> list[dict]:
         # DuckDB's Python API has no first-class per-query wall-clock timeout that's portable

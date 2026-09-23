@@ -100,11 +100,13 @@ Phase 10 — Security + Observability + Deployment
 Rationale: validate every hard AI/system component in isolation (headless, CLI-driven, own venv)
 before integrating. Do not build auth/Redis/React/Power BI alongside the POCs.
 
-### Current status: POC 1–4 and Phases 5–7 are done and closed; Phase 8 (React frontend) M0–M6 done.
+### Current status: POC 1–4 and Phases 5–7 done and closed; Phase 8 (React frontend) M0–M6 done; Phase 9 (Power BI export) built, parity run outstanding.
 Phase 8's frontend lives in `frontend/` — design, E2E verification and real findings in
-`frontend/docs/hld.md`. Phase 9+ (Power BI, security/observability/deployment hardening beyond
-what Phase 6/7 already added) has not been started and should still be explicitly requested, not
-assumed — confirm with the user before starting it.
+`frontend/docs/hld.md`. Phase 9's Power BI export is built (`backend/docs/phase9_powerbi.md`); its
+parity run in Power BI Desktop has not happened yet, so treat the generated TMDL as unverified
+formatting. Phase 10 (security/observability/deployment hardening beyond what Phase 6/7 already
+added) has not been started and should still be explicitly requested, not assumed — confirm with
+the user before starting it.
 
 ---
 
@@ -437,6 +439,58 @@ no path back from `running` — a future fix would need a periodic staleness che
 any `running` job whose `updated_at` is older than `discovery_job_timeout_seconds`), deliberately
 out of scope here since it's new machinery, not a completion of what M3 already built.
 
+### Phase 9 — Power BI Integration (built; parity run outstanding)
+A downloadable Power BI project, not an in-product rendering path. `GET
+/projects/{project_id}/powerbi/export` returns a zip — a PBIP/TMDL project generated from the
+dataset's **trusted** semantic model and the metric registry, plus the dataset's CSVs and a README —
+which a person opens in **Power BI Desktop**. Nothing Power BI renders appears in InsightFlow.
+
+**No Power BI Service, embedding, REST API, XMLA or scheduled refresh, and this is not deferrable
+work.** Embedding requires the report to be published to a Service workspace first (embed tokens are
+issued against a published report), which needs an Entra ID tenant, an app registration, a Pro/PPU
+service principal and capacity. A `.pbix` on disk cannot be embedded. There are no licences here, so
+the file is the integration. Don't plan work that assumes otherwise.
+
+Code: `backend/src/insightflow_backend/powerbi/{ir,build,dax,tmdl,export}.py` +
+`routers/powerbi.py`. Design, divergence table and the parity procedure:
+`backend/docs/phase9_powerbi.md`.
+
+- **`build.py` decides, `tmdl.py` formats.** Everything that could change a number (measure binding,
+  DAX, cardinality, the calendar's range, which columns may leave) is settled against types this repo
+  owns and unit-tested with no Power BI involved. A formatting mistake in the serializer changes no
+  numbers.
+- **DAX is generated through `bind_metric`** — the same call `SQLCompiler.compile` makes — never
+  hand-written per metric, so it can't drift from the engine on any dataset. A metric the engine
+  would refuse is refused identically and listed in the README with the engine's own wording.
+  Deliberate SQL/DAX divergences (`DISTINCTCOUNTNOBLANK` vs `DISTINCTCOUNT`, cross-entity ratios
+  under a slicer) are tabulated in the doc; each is stated in `dax.py` next to the translation.
+- **POC 1 records no cardinality and Power BI requires it**, so it's measured from the data
+  (distinct-value counts via the engine's own reader) and the many side becomes `fromColumn`.
+  Guessing it backwards is the Power BI version of the join fan-out `_compile_grouped_base` fixes.
+- **Relationship cycles are broken deterministically** — highest confidence first, any edge closing a
+  loop marked `isActive: false` with its reason — because Power BI allows one active path between two
+  tables and POC 1's output routinely has more (real Olist: `order_items → orders → payments`
+  alongside `order_items → payments`).
+- **The generated calendar's range is `infer_date_bounds`', not the clock**; `TODAY()` appears
+  nowhere in the output and a test asserts it.
+- **Analyst, not Viewer, and audit-logged despite being a GET** — it's the one route handing out raw
+  rows in bulk, and caveats, truncation flags, number grounding and RBAC all stop at the download.
+
+**A TMSL Relationship has no `description` property** — a `///` line before one makes Power BI
+Desktop reject the whole project ("Property 'description' is unknown and is not expected in the
+situation it appears"), found on the first real open. Tables, columns, measures, expressions and the
+model do have one. TMDL will write a property the object model doesn't accept and the error only
+surfaces at open time, as a whole-project rejection with no line reference — so audit description
+placement when adding anything to the generated model.
+
+**Parity comparison not yet done.** Engine ground truth on real Olist (after a mapping review, with
+`TIME_ENTITY=orders`): revenue 16,008,872.12 · orders 99,441 · customers 99,441 · aov 160.9886 ·
+repeat_purchase_rate 0.0 (correctly caveated — `customer_id` is per-order on Olist). Until someone
+opens the project in Desktop and compares, treat the TMDL scaffolding as unverified; the report
+layout JSON is the likeliest thing to need a correction.
+
+---
+
 ---
 
 ## 7. Open technical decisions (unresolved — surface before deciding unilaterally)
@@ -566,6 +620,16 @@ routes to existing pipelines" instead of a rewrite.
   machine — the default forks a subprocess per job via `os.fork()`, unavailable on Windows.
   Real Linux deployment containers (the `worker` service) would tolerate either, but keep them
   the same to avoid two code paths.
+- **Power BI is a file, not an integration.** There are no Power BI licences on this project, so the
+  Service, embedding, the REST API, XMLA and scheduled refresh are permanently out — not deferred.
+  Don't propose work that assumes a workspace or an embed token. The export route is the whole
+  surface.
+- **Never hand-write DAX for a registered metric.** `powerbi/dax.py` generates it through
+  `bind_metric`, the same call the SQL compiler makes, so the two engines can't drift. A metric the
+  engine would refuse must be omitted with the engine's own message, not translated anyway.
+- **Anything new that leaves the platform in bulk is Analyst+ and audit-logged**, even on a GET —
+  caveats, `truncated`, number grounding and RBAC all stop at a download, which the Power BI export
+  README says out loud. Keep saying it.
 - A `SIGKILL`'d worker leaves its `Job` row stuck at `running` forever — confirmed for real in
   Phase 7 M4, not just a theoretical gap. Don't assume job-status polling alone means a stuck job
   will eventually resolve; there's no watchdog/staleness reconciliation yet (see §6's Phase 7
@@ -606,9 +670,20 @@ routes to existing pipelines" instead of a rewrite.
   `validation/number_grounding.ungrounded_numbers` (rounding-tolerant) compares prose with the exact prompt
   the LLM saw: POC 4 withholds a chat explanation that fails it, POC 3 withholds a dashboard narrative and
   blanks a component rationale. Found when the chat explanation LLM summed three verified region counts on
-  real Olist. Questions limited to specific dimension values are refused via
-  `QuestionIntent.dimension_values` until the AST can filter by value. Use the same check for any new
-  LLM text shown next to numbers.
+  real Olist. Use the same check for any new LLM text shown next to numbers.
+- **Filtering by values is an engine feature, not LLM work.** `AnalyticalQuery.filters` (`ValueFilter`:
+  dimension + values) compiles to bound parameters, compared trimmed and case-insensitively, reaching a
+  related table through the same single-hop semi-join as time filters (no double counting; two hops is
+  refused, like GROUP BY). POC 4 never trusts the planner's `filter_dimension`: it confirms every value
+  against the data first (`AnalyticsEnginePipeline.match_filter_values`) and refuses a value that isn't
+  there instead of filtering to a confident 0. A canonical dimension means one column per dataset (the
+  highest-confidence trusted mapping), so what "region" matches depends on the mapping review.
+- **Anything that reads an uploaded CSV must read it the way the engine does.** Schema discovery uses pandas,
+  which pads ragged rows; the engine uses DuckDB, which is strict, and can silently read a malformed small
+  file as one text column. A Superstore export with two more tables appended passed discovery and then made
+  every query a raw 500. Uploads are now checked with `insightflow_core`'s `check_source_readable` (the same
+  `read_csv_sql` the engine's views use) before discovery, chat's date bounds read through DuckDB too, and a
+  `duckdb.Error` at query time is a 422 naming the file and line. Don't add a second CSV reader.
 - The SQL safety checker allowlists relationship join columns as well as trusted fields: a correct
   mapping review can reject a key column's *meaning* while the physical foreign key still joins.
 - LLM planners may only group by categorical fields (`PLANNER_DIMENSION_FIELDS` in

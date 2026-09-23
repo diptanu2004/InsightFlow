@@ -1,6 +1,9 @@
 import logging
+import re
 import time
+from pathlib import Path
 
+import duckdb
 import groq
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -8,11 +11,23 @@ from starlette.middleware.cors import CORSMiddleware
 
 from insightflow_backend.auth.rate_limit import build_auth_rate_limiter, build_llm_rate_limiter, build_redis_client
 from insightflow_backend.cache import build_result_cache
+from insightflow_core.execution.query_executor import describe_read_error
+
 from insightflow_backend.config import settings
 from insightflow_backend.logging_config import configure_logging
 from insightflow_backend.logging_context import get_org_id, get_user_id, new_request_id
 from insightflow_backend.pipeline_cache import PipelineCache
-from insightflow_backend.routers import analytics, auth, chat, dashboard, health, organizations, projects, schema
+from insightflow_backend.routers import (
+    analytics,
+    auth,
+    chat,
+    dashboard,
+    health,
+    organizations,
+    powerbi,
+    projects,
+    schema,
+)
 from insightflow_backend.storage import build_storage
 
 logger = logging.getLogger("insightflow")
@@ -125,6 +140,19 @@ def create_app() -> FastAPI:
             content={"detail": "The AI provider couldn't process this request. Try rephrasing or narrowing the question."},
         )
 
+    @app.exception_handler(duckdb.Error)
+    async def data_unreadable(request: Request, exc: duckdb.Error) -> JSONResponse:
+        # A dataset's own files failing to parse at query time is a property of the data, not a server fault.
+        # Found on a Superstore upload accepted before uploads were checked with the engine's reader: every
+        # dashboard and question was a raw 500 carrying DuckDB's twenty-line parser dump. Logged in full.
+        logger.warning("dataset_unreadable", extra={"error": str(exc)[:2000]})
+        file_match = re.search(r"file = (.+)", str(exc))
+        file_name = Path(file_match.group(1).strip()).name if file_match else "a file in this dataset"
+        return JSONResponse(
+            status_code=422,
+            content={"detail": f"This dataset's data couldn't be read. {describe_read_error(file_name, exc)} Re-upload the fixed file."},
+        )
+
     app.include_router(health.router)
     app.include_router(auth.router, prefix="/auth", tags=["auth"])
     app.include_router(organizations.router, prefix="/organizations", tags=["organizations"])
@@ -135,6 +163,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router)
     app.include_router(dashboard.router)
     app.include_router(chat.router)
+    app.include_router(powerbi.router)
     return app
 
 

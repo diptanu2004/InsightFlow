@@ -17,6 +17,8 @@ from insightflow_backend.config import settings
 from insightflow_backend.db.models import Dataset, Job, JobStatus, Project
 from insightflow_backend.db.session import SessionLocal
 from insightflow_backend.storage import build_storage
+from insightflow_core.execution.query_executor import check_source_readable
+
 from insightflow_backend.wiring import run_schema_discovery
 
 
@@ -67,6 +69,10 @@ def run_discovery_job(job_id: str) -> None:
                     local_path = Path(tmp) / filename
                     storage.download_to(f"{job.storage_prefix}/{filename}", local_path)
                     local_paths.append(str(local_path))
+                # Before spending an LLM call: a file the engine can't read would pass discovery (pandas is
+                # lenient) and then fail every query. Raises UnreadableSource, recorded as the job's error.
+                for path in local_paths:
+                    check_source_readable(path)
                 semantic_model = run_schema_discovery(local_paths)
         except Exception as e:
             _mark_failed(db, job_uuid, str(e))
