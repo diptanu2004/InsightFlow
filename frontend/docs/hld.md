@@ -511,7 +511,8 @@ old one.
 
 Still open: **15** (an ambiguous dimension is still reported as one that doesn't exist — the honest fix is
 deterministic, since a prompt instruction is not a guardrail, and the review UI has nowhere to resolve the
-clash), **14** (revenue as an expression — the B2/B3 engine work), **16–18**, **21–27**.
+clash), **14** (revenue as an expression — the B2/B3 engine work), **16–18**, **21–26**. **27** was fixed
+after the third run; see the end of this section for why it went first.
 
 ### The second run, against the fixed code
 
@@ -568,6 +569,24 @@ journeys were derailed by transient provider failures: four datasets lost schema
 retry behind it. Re-running the same six immediately afterwards, unchanged, passed three of them. Nothing
 about those datasets was wrong; the platform simply has no backoff, so one unlucky call loses a whole
 upload. Finding 27 should be read as the most frequently-hit defect in the survey, not a footnote.
+
+**27 — fixed.** `backend/llm_retry.py`'s `RetryingLLMClient` wraps all three provider clients at the wiring
+layer — schema discovery, dashboard and chat — rather than inside any one of the four vendored
+`GroqLLMClient` copies. Three attempts, exponential backoff with jitter, capped at 8 seconds a wait.
+
+Two things it deliberately does not do, both of which the survey argued for:
+
+- **It does not wait out a daily quota.** Groq answers an exhausted per-day token budget with the same 429
+  class it uses for a per-minute burst, but a `retry-after` in minutes cannot succeed inside a request. A
+  hint longer than the sleep cap means "don't bother", and the caller gets `llm_errors`' clean sentence
+  immediately. Confirmed live while this was being written: a 429 carrying `try again in 1m57s` went
+  through `RetryingLLMClient` and failed on the first attempt, with no sleep.
+- **It does not retry a request the provider rejected on its merits.** `llm_errors.is_transient` is the one
+  definition of what is worth repeating; a 413 for an over-long prompt will be rejected identically every
+  time.
+
+`llm_errors.py` now earns its keep twice over — it already knew which failures are transient for finding
+28's message, and that same predicate decides what to retry here.
 
 One button under the semantic model, shown to Analysts and above only, matching the route's own gate:
 it downloads a Power BI project the reader opens in Power BI Desktop. Nothing Power BI renders appears

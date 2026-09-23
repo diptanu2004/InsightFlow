@@ -19,6 +19,7 @@ from insightflow_schema_discovery.llm.groq_client import GroqLLMClient as Schema
 from insightflow_schema_discovery.pipeline import SchemaDiscoveryPipeline
 
 from insightflow_backend.config import settings
+from insightflow_backend.llm_retry import RetryingLLMClient
 from insightflow_backend.registry.bootstrap import bootstrap_registry
 
 
@@ -28,7 +29,10 @@ def run_schema_discovery(filepaths: list[str]) -> CoreSemanticModel:
     classes are field-identical but not the same Pydantic model; see insightflow_core's
     semantic_model.py docstring). Not a new pattern, just done in-memory instead of via a file.
     """
-    poc1_pipeline = SchemaDiscoveryPipeline(llm_client=SchemaGroqLLMClient())
+    # Every provider call in this backend goes through RetryingLLMClient -- a single transient 429 or
+    # dropped connection used to lose a whole upload (frontend/docs/hld.md finding 27). Discovery is the
+    # most expensive one to lose: the files are already transferred and every column already profiled.
+    poc1_pipeline = SchemaDiscoveryPipeline(llm_client=RetryingLLMClient(SchemaGroqLLMClient()))
     poc1_model = poc1_pipeline.run(filepaths)
     return CoreSemanticModel(**json.loads(poc1_model.model_dump_json()))
 
@@ -59,7 +63,7 @@ def build_dashboard(semantic_model: CoreSemanticModel, data_dir: str) -> Dashboa
         semantic_model,
         registry,
         data_dir,
-        DashboardGroqLLMClient(),
+        RetryingLLMClient(DashboardGroqLLMClient()),
         min_components=settings.dashboard_min_components,
         max_components=settings.dashboard_max_components,
         reference_date=reference_date,
@@ -78,7 +82,7 @@ def build_chatbot(
         semantic_model,
         registry,
         engine,
-        ChatbotGroqLLMClient(),
+        RetryingLLMClient(ChatbotGroqLLMClient()),
         data_dir,
         time_entity=settings.time_entity,
         time_field=settings.time_field,
