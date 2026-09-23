@@ -61,6 +61,9 @@ def bootstrap_registry() -> MetricRegistry:
             aggregation=AggregationType.COUNT_DISTINCT,
             colocate_with_field="customer_id",
             format="count",
+            # Aggregated per customer inside repeat_purchase_rate; as a KPI of its own it read
+            # "Orders per customer: 99" on jaffle_shop, which is the order count.
+            planner_selectable=False,
         )
     )
 

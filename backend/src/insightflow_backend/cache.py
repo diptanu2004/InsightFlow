@@ -38,7 +38,12 @@ import redis
 #  14 -- Phase 8: questions limited to specific values are computed with engine value filters.
 #  15 -- Phase 8: a missing filter value's refusal names the column searched.
 #  16 -- Phase 8: chat dates read with the engine's CSV reader; grouped values formatted for explanations.
-COMPUTATION_VERSION = 16
+#  17 -- Ten-dataset survey fixes: the sparse-tail anchor judges a candidate month against the whole
+#        series (a long gradual tail used to survive entirely, moving every relative period); a
+#        population hint naming a field the dataset lacks falls back to the header table instead of
+#        refusing; `m/d/Y H:MM` columns read as dates instead of disabling every period; helper
+#        measures are no longer offered to planners. See frontend/docs/hld.md findings 10-13 and 19.
+COMPUTATION_VERSION = 17
 
 
 def build_cache_key(dataset_id, route: str, payload: dict) -> str:

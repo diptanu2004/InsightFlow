@@ -472,6 +472,47 @@ Everything below is a coverage, diagnosis or presentation failure — not an ari
       share, not in an ASGI handler — `jobs.py` should classify the exception the same way before writing
       `Job.error`, and a provider quota failure should arguably leave the job retryable rather than `failed`.
 
+### What the survey's findings changed
+
+Fixed, each with a regression test naming the dataset that found it. `COMPUTATION_VERSION` went to 17:
+four of these change the result for an unchanged dataset, so the result cache must not keep serving the
+old one.
+
+- **10 — the binding refusal that emptied `pizza_place_sales`.** `measure_binding._header_entity`: when a
+  population hint names a field *no* entity in the dataset has, it is discriminating nothing, so the
+  relationships decide instead — the candidate every other candidate points at over the same field is the
+  header table. A hint that exists and merely fails to narrow still refuses, because then the candidates
+  really do disagree about grain (the Olist case that motivated hints keeps its old behaviour, and its
+  test still asserts the refusal).
+- **11 — the encoding message.** `check_source_readable` now scans for the first byte that isn't valid
+  UTF-8 before falling back to DuckDB's wording, and names it: *"sales_data_sample.csv" isn't UTF-8 text:
+  the byte 0x84 on line 29 is not valid UTF-8. Spreadsheets often save as Windows-1252 instead…*. The scan
+  streams, so a character straddling a 1 MiB read boundary isn't mistaken for corruption. Reading cp1252
+  files directly is still not supported — this only makes the refusal actionable.
+- **12 — `m/d/Y H:MM` dates.** New `compilation/date_expr.date_expression`, used by both the compiler's
+  time-filter predicate and `infer_date_bounds`, so the window a question reports and the window its
+  `WHERE` clause selects cannot disagree. The `try_strptime` fallback is reached only when the plain cast
+  yields NULL, so every column DuckDB already types as a date reads exactly as before. ClassicModels now
+  parses 2,823 of 2,823 rows, 2003-01-06 to 2005-05-31. Because the fallback yields NULL where the old
+  cast raised, `infer_date_bounds` now checks explicitly that *every* non-null value parsed, keeping the
+  old strictness rather than silently dropping rows from time filters.
+- **13 — the sparse-tail anchor.** `_anchor_from_counts` measures a candidate month against the median of
+  every month still kept before it, not the six immediately preceding ones, which are themselves tail on
+  any tail longer than a month or two. BikeStores now anchors in April 2018 instead of 2018-12-28.
+- **19 — helper measures on dashboards.** `Measure.planner_selectable` (default True, False on
+  `orders_per_customer` in all four registries), honoured by `resolvable_metric_names(..., planner_only=True)`
+  in both planner contexts. Validators deliberately don't pass it: a deterministic query naming the measure
+  is still legal, it just isn't something an LLM should pick. This also removes finding 20's northwind
+  duplicate, which was `orders by customer_name` beside `orders_per_customer by customer_name`.
+- **28 — the provider error leak.** New `backend/llm_errors.py` holds the exception→sentence mapping;
+  `main.py`'s handlers and `jobs.py` both call it, so the two can't drift. Confirmed against a real Groq
+  429: the `Job` row now reads *"The AI provider's usage limit has been reached. Try again in a few
+  minutes. Re-upload to try again."* instead of the provider's body.
+
+Still open: **15** (an ambiguous dimension is still reported as one that doesn't exist — the honest fix is
+deterministic, since a prompt instruction is not a guardrail, and the review UI has nowhere to resolve the
+clash), **14** (revenue as an expression — the B2/B3 engine work), **16–18**, **21–27**.
+
 One button under the semantic model, shown to Analysts and above only, matching the route's own gate:
 it downloads a Power BI project the reader opens in Power BI Desktop. Nothing Power BI renders appears
 in this app — there are no Power BI licences, so the Service, embedding and the REST API are out

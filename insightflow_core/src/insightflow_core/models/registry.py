@@ -49,6 +49,14 @@ class Measure(BaseModel):
     # candidate entity carries this field, the measure stays ambiguous and is refused.
     colocate_with_field: Optional[str] = None
     format: MetricFormat = "number"
+    # Whether an LLM planner may pick this measure as a dashboard component or an answer in its own
+    # right. False marks a measure that exists to be aggregated *inside* another metric and means
+    # nothing on its own: `orders_per_customer` is `repeat_purchase_rate`'s per-customer GROUP BY,
+    # and offered as a KPI it rendered "Orders per customer: 99" on jaffle_shop -- the total order
+    # count, where the real figure is 1.6 (frontend/docs/hld.md finding 19). Deterministic GROUP BY
+    # through the analytics API is unaffected; this only constrains what a planner may choose, the
+    # same way PLANNER_DIMENSION_FIELDS constrains dimensions.
+    planner_selectable: bool = True
 
 
 class MetricKind(str, Enum):

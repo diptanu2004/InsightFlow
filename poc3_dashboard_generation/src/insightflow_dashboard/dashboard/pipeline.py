@@ -114,7 +114,10 @@ class DashboardGenerationPipeline:
         # Same "only offer what the validator would accept" principle as the dimension filter
         # above, applied to metrics: a registered metric that can't resolve against THIS dataset's
         # semantic model is never shown to the planner. DashboardValidator re-checks it anyway.
-        runnable = resolvable_metric_names(self.registry, self.semantic_model) - set(withheld)
+        # planner_only: a helper measure like orders_per_customer exists to be aggregated inside
+        # repeat_purchase_rate, and as a KPI of its own it read "Orders per customer: 99" on
+        # jaffle_shop -- the order count (hld.md finding 19). DashboardValidator still accepts it.
+        runnable = resolvable_metric_names(self.registry, self.semantic_model, planner_only=True) - set(withheld)
         metrics = [
             # The bound entity, not `measure.entity` -- that's an optional pin and usually unset.
             # Every runnable bare measure binds on its own, so bind_measure can't raise here.

@@ -104,3 +104,40 @@ def test_a_column_that_does_not_read_as_dates_is_reported_as_such(tmp_path):
 
     with pytest.raises(UnreadableDates, match='"order_date" column doesn\'t read as dates'):
         infer_date_bounds(_single_entity_model(), str(tmp_path), None, "transaction_date")
+
+
+def test_a_long_gradual_tail_is_trimmed_too():
+    """Real BikeStores: orders stop in April 2018, then dribble on for seven more months.
+
+    Against the six months immediately before it, December's single order sat beside a median of
+    1.5 and cleared the 10% bar on the first iteration, so the whole tail survived and the anchor
+    landed on 2018-12-28 -- "last quarter" then meant a quarter holding four orders.
+    """
+    from datetime import date
+
+    from insightflow_chatbot.services.date_bounds import anchor_date
+
+    dates = [date(y, m, 15) for y in (2016, 2017) for m in range(1, 13) for _ in range(50)]
+    dates += [date(2018, 1, 15)] * 52 + [date(2018, 2, 15)] * 35 + [date(2018, 3, 15)] * 68
+    dates += [date(2018, 4, 1)] * 124 + [date(2018, 4, 27)]
+    for month, count in ((6, 1), (7, 4), (8, 2), (9, 1), (10, 1), (11, 2), (12, 1)):
+        dates += [date(2018, month, 20)] * count
+
+    assert anchor_date(dates) == date(2018, 4, 27)
+
+
+def test_a_us_datetime_column_reads_as_dates_instead_of_disabling_periods(tmp_path):
+    """Real ClassicModels ORDERDATE: `2/24/2003 0:00`, which DuckDB's sniffer leaves as VARCHAR.
+
+    The whole dataset lost every period question while all-time totals kept working
+    (frontend/docs/hld.md finding 12).
+    """
+    from datetime import date
+
+    rows = "".join(f"O{i},{m}/24/2003 0:00\n" for i, m in enumerate(range(1, 13)))
+    (tmp_path / "sales.csv").write_text("order_id,order_date\n" + rows, encoding="utf-8")
+
+    assert infer_date_bounds(_single_entity_model(), str(tmp_path), None, "transaction_date") == (
+        date(2003, 1, 24),
+        date(2003, 12, 24),
+    )

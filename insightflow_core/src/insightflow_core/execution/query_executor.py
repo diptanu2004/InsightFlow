@@ -1,3 +1,4 @@
+import codecs
 import csv
 import re
 import time
@@ -33,6 +34,18 @@ def check_source_readable(csv_path: str) -> None:
         con.execute(f"SELECT COUNT(*) FROM ({read_csv_sql(csv_path)})").fetchone()
         column_count = len(con.execute(f"DESCRIBE {read_csv_sql(csv_path)}").fetchall())
     except duckdb.Error as exc:
+        # Encoding first: DuckDB reads UTF-8 only, and its complaint about a cp1252 byte is a bare
+        # "CSV Error on Line: 29", which reads like a ragged row and tells the uploader nothing.
+        # Two of the five datasets added for the ten-dataset survey arrived this way -- Excel on
+        # Windows writes Windows-1252 by default (frontend/docs/hld.md finding 11).
+        invalid = _first_invalid_utf8(csv_path)
+        if invalid is not None:
+            line, byte = invalid
+            raise UnreadableSource(
+                f'"{Path(csv_path).name}" isn\'t UTF-8 text: the byte 0x{byte:02x} on line {line} is not valid '
+                "UTF-8. Spreadsheets often save as Windows-1252 instead; re-save the file as UTF-8 "
+                "(in Excel, \"CSV UTF-8\") and upload it again."
+            ) from exc
         raise UnreadableSource(describe_read_error(Path(csv_path).name, exc)) from exc
     finally:
         con.close()
@@ -47,6 +60,33 @@ def check_source_readable(csv_path: str) -> None:
             "columns its header has. If the file holds more than one table or a summary block, split it into "
             "separate CSVs before uploading."
         )
+
+
+def _first_invalid_utf8(csv_path: str) -> tuple[int, int] | None:
+    """(line number, byte value) of the first byte that isn't valid UTF-8, or None if the file is.
+
+    Streamed through an incremental decoder rather than read whole: the largest file in the test
+    set is 94 MB, and a character split across a chunk boundary must not read as corruption.
+    """
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    line = 1
+    try:
+        handle = open(csv_path, "rb")
+    except OSError:
+        # Unopenable is not an encoding problem; let the caller report DuckDB's own reason.
+        return None
+    with handle:
+        while True:
+            chunk = handle.read(1 << 20)
+            try:
+                text = decoder.decode(chunk, final=not chunk)
+            except UnicodeDecodeError as exc:
+                # exc.object is the decoder's pending bytes plus this chunk; the carried bytes are
+                # continuation bytes of one character, so they hold no newlines of their own.
+                return line + exc.object[: exc.start].count(b"\n"), exc.object[exc.start]
+            line += text.count("\n")
+            if not chunk:
+                return None
 
 
 def _header_field_count(csv_path: str) -> int:

@@ -49,3 +49,50 @@ def test_a_genuine_single_column_file_passes(tmp_path):
     path = tmp_path / "ids.csv"
     path.write_text("customer_id\nC1\nC2\n")
     check_source_readable(str(path))
+
+
+def test_a_windows_1252_file_is_named_as_an_encoding_problem(tmp_path):
+    """Real ClassicModels `sales_data_sample.csv`: a Swedish address holds 0x84 on line 29.
+
+    DuckDB reads UTF-8 only and says just "CSV Error on Line: 29", which reads like a ragged row.
+    Two of the five datasets added for the ten-dataset survey arrived this way -- Excel on Windows
+    writes Windows-1252 by default (frontend/docs/hld.md finding 11).
+    """
+    csv_path = tmp_path / "sales_data_sample.csv"
+    rows = [b"ORDERNUMBER,CUSTOMERNAME,ADDRESSLINE1"]
+    rows += [b"1010%d,Land of Toys Inc.,897 Long Airport Avenue" % (i % 10) for i in range(27)]
+    rows += [b"10109,Volvo Model Replicas Co,Berguvsv\x84gen 8"]
+    csv_path.write_bytes(b"\n".join(rows) + b"\n")
+
+    with pytest.raises(UnreadableSource) as caught:
+        check_source_readable(str(csv_path))
+    message = str(caught.value)
+    assert "isn't UTF-8 text" in message
+    assert "0x84" in message
+    assert "line 29" in message
+    assert "CSV Error on Line" not in message
+
+
+def test_the_same_file_saved_as_utf8_reads_fine(tmp_path):
+    csv_path = tmp_path / "sales_data_sample.csv"
+    csv_path.write_text("ORDERNUMBER,CUSTOMERNAME,ADDRESSLINE1\n10109,Volvo,Berguvsvägen 8\n", encoding="utf-8")
+    check_source_readable(str(csv_path))
+
+
+def test_a_multibyte_character_spanning_a_read_boundary_is_not_corruption(tmp_path):
+    """The scan streams in 1 MiB chunks, so a character straddling one must not read as a bad byte.
+
+    Placed exactly: the two bytes of "e-acute" land either side of offset 1 MiB, which is the case
+    a naive per-chunk `bytes.decode` gets wrong.
+    """
+    from insightflow_core.execution.query_executor import _first_invalid_utf8
+
+    boundary = 1 << 20
+    e_acute = b"\xc3\xa9"
+    body = b"name\n" + b"x\n" * ((boundary - 5) // 2)
+    payload = body.ljust(boundary - 1, b"x") + e_acute + b"\n"
+    assert payload.index(e_acute) == boundary - 1
+
+    csv_path = tmp_path / "wide.csv"
+    csv_path.write_bytes(payload)
+    assert _first_invalid_utf8(str(csv_path)) is None

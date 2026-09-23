@@ -18,6 +18,10 @@ The ambiguity rule is deliberately strict, and deterministic -- no LLM is ever i
      lives, i.e. customers who ordered rather than every customer on file. Needed because a key
      column sits on both sides of every relationship, so without it basic count KPIs were refused
      on almost any normalized schema (the sample data itself lost `customers`).
+  3a. If that hint names a field *no* entity in the dataset has, it cannot be discriminating
+     anything, and the relationships decide instead: the candidate every other candidate points at
+     over this same field is the header table (`_header_entity`). A hint that exists and merely
+     fails to narrow still refuses -- see that function for why the two cases differ.
   4. A measure read alongside a sibling (RATIO numerator/denominator, HAVING_RATIO threshold/
      denominator) co-locates: if the sibling's candidates narrow it to one shared entity, both
      use it. Real Olist `order_id` is on both order_items and payments; beside `revenue` (only on
@@ -80,7 +84,53 @@ def _candidates(measure: Measure, semantic_model: SemanticModel) -> list[str]:
         ]
         if narrowed:
             return narrowed
+        if not _model_has_field(measure.colocate_with_field, semantic_model):
+            # The hint names a field this dataset doesn't have anywhere, so it isn't narrowing
+            # anything -- it's silent. Fall back to the relationship shape rather than refuse.
+            header = _header_entity(measure.source_field, found, semantic_model)
+            if header is not None:
+                return [header]
     return found
+
+
+def _model_has_field(field_name: str, semantic_model: SemanticModel) -> bool:
+    return any(f.name == field_name for e in semantic_model.entities for f in e.fields)
+
+
+def _header_entity(source_field: str, candidates: list[str], semantic_model: SemanticModel) -> str | None:
+    """The one candidate every other candidate points *at* over a relationship on this same field.
+
+    Rule 3's population hint is the normal way a key column's grain is settled, but a hint is only
+    a discriminator when the dataset has the field it names. Maven's Pizza Place Sales has no
+    customer identifier at all, so `orders`' hint ("order_id where customer_id lives") could not
+    separate `orders` from `order_details`, and a plain order count was refused on a dataset whose
+    order header is unmistakable -- no dashboard, and every question refused.
+
+    Where the hint is silent, the relationships say which side is the header: `order_details.order_id
+    -> orders.order_id` makes `orders` the one side and `order_details` the many side, exactly the
+    distinction the hint was standing in for. Applied only when the hint names a field no entity
+    has; a hint that exists and simply fails to narrow still refuses, because then the candidates
+    really do disagree about grain.
+    """
+    columns = {
+        e.name: {f"{e.name}.{f.source_column}" for f in e.fields if f.name == source_field}
+        for e in semantic_model.entities
+        if e.name in candidates
+    }
+    pointed_at: set[str] = set()
+    pointed_from: set[str] = set()
+    for relationship in semantic_model.relationships:
+        source = relationship.from_field.partition(".")[0]
+        target = relationship.to_field.partition(".")[0]
+        if source not in candidates or target not in candidates:
+            continue
+        if relationship.from_field in columns[source] and relationship.to_field in columns[target]:
+            pointed_at.add(target)
+            pointed_from.add(source)
+    # One entity everything points at, and it points at nothing itself: the header table.
+    if len(pointed_at) == 1 and pointed_at.isdisjoint(pointed_from):
+        return next(iter(pointed_at))
+    return None
 
 
 def _ambiguous(measure: Measure, candidates: list[str], sibling: Measure | None = None) -> UnresolvableMeasure:

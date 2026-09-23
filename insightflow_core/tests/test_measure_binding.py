@@ -237,3 +237,43 @@ def test_results_carry_the_registrys_display_format(tmp_path):
         executor=executor,
     )
     assert engine.run(AnalyticalQuery(operation=OperationType.AGGREGATE, metric="revenue")).format == "money"
+
+
+def _pizza_model() -> SemanticModel:
+    """Maven's Pizza Place Sales, as POC 1 really maps it: four files, no customer identifier at all."""
+    return SemanticModel(
+        entities=[
+            Entity(name="orders", fields=[_field("order_id", "order_id", "orders"), _field("transaction_date", "date", "orders")]),
+            Entity(
+                name="order_details",
+                fields=[_field("order_id", "order_id", "order_details"), _field("product_id", "pizza_id", "order_details")],
+            ),
+            Entity(name="pizzas", fields=[_field("product_id", "pizza_id", "pizzas"), _field("price", "price", "pizzas")]),
+        ],
+        relationships=[
+            Relationship(from_field="order_details.order_id", to_field="orders.order_id", confidence=1.0, direction="x"),
+            Relationship(from_field="order_details.pizza_id", to_field="pizzas.pizza_id", confidence=1.0, direction="x"),
+        ],
+    )
+
+
+def test_a_hint_the_dataset_has_no_field_for_falls_back_to_the_header_table():
+    """No customer_id anywhere, so the hint discriminates nothing and the relationship decides.
+
+    Before this, Pizza Place Sales produced no dashboard and refused every question -- including
+    "how many orders were there", on a file whose 21,350 order ids are its primary key.
+    """
+    orders = Measure(
+        name="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT, colocate_with_field="customer_id"
+    )
+    assert bind_measure(orders, _pizza_model()).entity == "orders"
+
+
+def test_the_fallback_needs_a_relationship_and_refuses_without_one():
+    model = _pizza_model()
+    model.relationships = [r for r in model.relationships if "orders" not in r.to_field]
+    orders = Measure(
+        name="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT, colocate_with_field="customer_id"
+    )
+    with pytest.raises(UnresolvableMeasure, match="more than one entity"):
+        bind_measure(orders, model)

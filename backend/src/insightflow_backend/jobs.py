@@ -16,6 +16,7 @@ from insightflow_backend import audit
 from insightflow_backend.config import settings
 from insightflow_backend.db.models import Dataset, Job, JobStatus, Project
 from insightflow_backend.db.session import SessionLocal
+from insightflow_backend.llm_errors import is_transient, provider_message
 from insightflow_backend.storage import build_storage
 from insightflow_core.execution.query_executor import check_source_readable
 
@@ -37,6 +38,20 @@ def enqueue_discovery_job(job_id: uuid.UUID) -> None:
     get_queue().enqueue(
         run_discovery_job, str(job_id), job_timeout=settings.discovery_job_timeout_seconds
     )
+
+
+def _describe(exc: BaseException) -> str:
+    """What to store on the Job row -- the one thing a person sees when discovery fails.
+
+    A provider failure gets llm_errors' sentence rather than `str(exc)`: Groq's 429 body carries
+    this deployment's organization id and a billing link, and it reached the upload panel verbatim
+    (frontend/docs/hld.md finding 28). Everything else is still reported as-is, because the raw
+    message is the useful part for a malformed CSV or a bug in discovery itself.
+    """
+    message = provider_message(exc)
+    if message is None:
+        return str(exc)
+    return f"{message} Re-upload to try again." if is_transient(exc) else message
 
 
 def _mark_failed(db: Session, job_id: uuid.UUID, error: str) -> None:
@@ -75,7 +90,7 @@ def run_discovery_job(job_id: str) -> None:
                     check_source_readable(path)
                 semantic_model = run_schema_discovery(local_paths)
         except Exception as e:
-            _mark_failed(db, job_uuid, str(e))
+            _mark_failed(db, job_uuid, _describe(e))
             raise
 
         try:
@@ -103,7 +118,7 @@ def run_discovery_job(job_id: str) -> None:
             job.status = JobStatus.DONE
             db.commit()
         except Exception as e:
-            _mark_failed(db, job_uuid, str(e))
+            _mark_failed(db, job_uuid, _describe(e))
             raise
     finally:
         db.close()

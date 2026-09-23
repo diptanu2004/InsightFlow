@@ -86,8 +86,19 @@ def unresolvable_reason(name: str, registry: MetricRegistry, semantic_model: Sem
     return None
 
 
-def resolvable_metric_names(registry: MetricRegistry, semantic_model: SemanticModel) -> set[str]:
+def resolvable_metric_names(
+    registry: MetricRegistry, semantic_model: SemanticModel, planner_only: bool = False
+) -> set[str]:
+    """Every registered name this dataset can compute.
+
+    `planner_only=True` additionally drops measures marked `planner_selectable=False` -- helper
+    measures that exist to be aggregated inside another metric and mean nothing alone. Callers that
+    validate (ASTValidator, DashboardValidator) must leave it False: a deterministic query naming
+    such a measure is still perfectly legal, it just isn't something an LLM should choose.
+    """
     names = set(registry.measures) | set(registry.metrics)
+    if planner_only:
+        names -= {name for name, measure in registry.measures.items() if not measure.planner_selectable}
     return {name for name in names if unresolvable_reason(name, registry, semantic_model) is None}
 
 

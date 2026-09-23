@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from insightflow_core.compilation.date_expr import date_expression
 from insightflow_core.compilation.field_resolver import FieldResolver
 from insightflow_core.compilation.measure_binding import bind_metric, resolve_time_entity
 from insightflow_core.models import (
@@ -459,7 +460,11 @@ class SQLCompiler:
                 f'(SELECT "{right_entity}"."{right_col}" FROM "{right_entity}" WHERE {inner})'
             )
         loc = self.field_resolver.resolve_field(entity, self.TIME_FIELD)
-        col = f'"{loc.entity}"."{loc.source_column}"'
+        # Not a bare column reference: a US `m/d/Y H:MM` column is VARCHAR to DuckDB's sniffer, and
+        # comparing it to the bound `date` params would not mean what it says. date_expression is
+        # the same reading infer_date_bounds uses, so the window a question reports and the window
+        # its WHERE clause selects can't disagree.
+        col = date_expression(f'"{loc.entity}"."{loc.source_column}"')
         start_key, end_key = f"{prefix}_start", f"{prefix}_end"
         params[start_key] = time_filter.start_date
         # TimeFilter.end_date is a calendar `date` (models/query.py), not a timestamp -- callers

@@ -63,7 +63,9 @@ def build_planner_context(semantic_model: SemanticModel, registry: MetricRegistr
     # as unanswerable -- the explicit "can't be answered from available data" refusal POC 4 exists
     # to give -- rather than as a plan that crashes in the engine. QuestionValidator re-checks
     # the assembled query regardless, same double-checking as the dimension filter above.
-    runnable = resolvable_metric_names(registry, semantic_model)
+    # planner_only: same reason as the dashboard planner's -- a helper measure means nothing as an
+    # answer on its own, and QuestionValidator still accepts one if a query names it directly.
+    runnable = resolvable_metric_names(registry, semantic_model, planner_only=True)
     metrics = [
         # The bound entity, not `measure.entity` -- that's an optional pin and usually unset. Every
         # runnable bare measure binds on its own, so bind_measure can't raise here.

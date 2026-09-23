@@ -15,13 +15,13 @@ from statistics import median
 
 import duckdb
 
+from insightflow_core.compilation.date_expr import date_expression
 from insightflow_core.execution.query_executor import read_csv_sql
 from insightflow_core.models import SemanticModel
 
-# A trailing month holding less than this share of recent typical volume is treated as the ragged
-# edge of an export, not as business activity. See anchor_date.
+# A trailing month holding less than this share of the dataset's typical volume is treated as the
+# ragged edge of an export, not as business activity. See anchor_date.
 _SPARSE_TAIL_RATIO = 0.10
-_RECENT_MONTHS = 6
 _MIN_HISTORY_MONTHS = 3
 
 
@@ -48,11 +48,21 @@ def anchor_date(dates: list[date]) -> date:
     (2018-10-17), a dashboard's 90-day growth window was mostly empty months and its narrative
     reported a "-52%, deteriorating" business; "last quarter" meant a quarter with one real month.
 
-    Rule: walking back from the last month, drop it while it holds under 10% of the median of the up
-    to 6 months before it (only once 3 months of history exist to judge by), and anchor on the last
-    real date of the month that remains. Deliberate tradeoff: a genuine one-month collapse of more
-    than 90% would also be read as a truncated export -- vastly rarer than a cut-off extract, but not
-    impossible. Only the anchor moves; nothing is deleted, and all-time totals still count every row.
+    Rule: walking back from the last month, drop it while it holds under 10% of the median of every
+    month still kept before it (only once 3 months of history exist to judge by), and anchor on the
+    last real date of the month that remains. Deliberate tradeoff: a genuine one-month collapse of
+    more than 90% would also be read as a truncated export -- vastly rarer than a cut-off extract,
+    but not impossible. Only the anchor moves; nothing is deleted, and all-time totals still count
+    every row.
+
+    The baseline is every kept month, not the 6 immediately before the candidate, because those are
+    themselves tail whenever the tail runs longer than a month or two. Found on BikeStores, whose
+    orders really stop in April 2018 (125 that month) and then dribble 1, 4, 2, 1, 1, 2, 1 per month
+    to December: against the six months before it, December's single order was measured against a
+    median of 1.5 and cleared the bar on the first iteration, so nothing was trimmed at all. The
+    anchor landed on 2018-12-28, "last quarter" meant a quarter holding 4 orders, and a dashboard
+    reported a 33% decline for a business that was flat. Against the median of the whole series
+    (~50) every tail month falls under the 10% bar and the anchor lands in April, as intended.
     """
     return _anchor_from_counts(Counter(dates))
 
@@ -64,8 +74,8 @@ def _anchor_from_counts(rows_per_day: Counter) -> date:
     months = sorted(by_month)
     kept = list(months)
     while len(kept) > _MIN_HISTORY_MONTHS:
-        recent = [by_month[m] for m in kept[:-1][-_RECENT_MONTHS:]]
-        if by_month[kept[-1]] >= _SPARSE_TAIL_RATIO * median(recent):
+        baseline = median([by_month[m] for m in kept[:-1]])
+        if by_month[kept[-1]] >= _SPARSE_TAIL_RATIO * baseline:
             break
         kept.pop()
     last_year, last_month = kept[-1]
@@ -112,10 +122,18 @@ def infer_date_bounds(
     con = duckdb.connect(":memory:")
     try:
         # Counted per day in SQL: a million-row upload shouldn't become a million Python objects.
+        # The same reading the compiler's WHERE clause uses, so a period this reports as available
+        # is one a query can actually select (insightflow_core.compilation.date_expr).
+        day = date_expression(column)
         rows = con.execute(
-            f"SELECT CAST({column} AS DATE) AS day, COUNT(*) FROM ({read_csv_sql(str(csv_path))}) "
-            f"WHERE {column} IS NOT NULL GROUP BY 1"
+            f"SELECT {day} AS day, COUNT(*) FROM ({read_csv_sql(str(csv_path))}) "
+            f"WHERE {day} IS NOT NULL GROUP BY 1"
         ).fetchall()
+        # date_expression yields NULL rather than raising, so "unparseable" now looks like "no rows"
+        # and has to be told apart from a genuinely empty file explicitly.
+        present = con.execute(
+            f"SELECT COUNT(*) FROM ({read_csv_sql(str(csv_path))}) WHERE {column} IS NOT NULL"
+        ).fetchone()[0]
     except duckdb.ConversionException as exc:
         raise UnreadableDates(
             f'the "{field.source_column}" column doesn\'t read as dates (it mixes formats or holds text)'
@@ -124,6 +142,18 @@ def infer_date_bounds(
         con.close()
 
     rows_per_day = Counter({day: count for day, count in rows if day is not None})
+    # date_expression yields NULL where the old plain CAST raised, so the strictness the old
+    # behaviour got for free has to be stated: every non-null value must read as a date, or the
+    # column is refused as before. Silently skipping the ones that don't would quietly drop those
+    # rows from every time filter instead. A format DuckDB merely doesn't sniff (`2/24/2003 0:00`)
+    # parses in full, which is the whole point of the fallback; genuine prose in a date column
+    # still doesn't.
+    unparsed = present - sum(rows_per_day.values())
+    if unparsed > 0:
+        raise UnreadableDates(
+            f'the "{field.source_column}" column doesn\'t read as dates '
+            f"({unparsed} of {present} values don't parse -- it mixes formats or holds text)"
+        )
     if not rows_per_day:
         raise ValueError(f'no rows found in "{csv_path}" to infer date bounds from')
     return min(rows_per_day), _anchor_from_counts(rows_per_day)

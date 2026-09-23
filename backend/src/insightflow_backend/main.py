@@ -14,6 +14,7 @@ from insightflow_backend.cache import build_result_cache
 from insightflow_core.execution.query_executor import describe_read_error
 
 from insightflow_backend.config import settings
+from insightflow_backend.llm_errors import provider_message
 from insightflow_backend.logging_config import configure_logging
 from insightflow_backend.logging_context import get_org_id, get_user_id, new_request_id
 from insightflow_backend.pipeline_cache import PipelineCache
@@ -109,11 +110,12 @@ def create_app() -> FastAPI:
         # The AI provider's own quota (not this backend's rate limiter) -- previously an unhandled
         # 500 from dashboard/generate and chat/ask, found when Groq's daily token limit ran out. It's a
         # temporary, external condition, so 503 plus the provider's retry hint, not a server fault.
+        # The sentence itself is llm_errors', shared with the discovery worker, which has no handlers.
         retry_after = exc.response.headers.get("retry-after") if exc.response is not None else None
         headers = {"Retry-After": retry_after} if retry_after else {}
         return JSONResponse(
             status_code=503,
-            content={"detail": "The AI provider's usage limit has been reached. Try again in a few minutes."},
+            content={"detail": provider_message(exc)},
             headers=headers,
         )
 
@@ -125,7 +127,7 @@ def create_app() -> FastAPI:
         # failed that way during a stretch of Groq timeouts.
         return JSONResponse(
             status_code=503,
-            content={"detail": "The AI provider didn't respond. Try again in a moment."},
+            content={"detail": provider_message(exc)},
         )
 
     @app.exception_handler(groq.APIStatusError)
@@ -137,7 +139,7 @@ def create_app() -> FastAPI:
         logger.warning("llm_provider_rejected_request", extra={"status_code": exc.status_code})
         return JSONResponse(
             status_code=503,
-            content={"detail": "The AI provider couldn't process this request. Try rephrasing or narrowing the question."},
+            content={"detail": provider_message(exc)},
         )
 
     @app.exception_handler(duckdb.Error)

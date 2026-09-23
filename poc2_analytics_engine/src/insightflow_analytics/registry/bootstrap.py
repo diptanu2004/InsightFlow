@@ -25,7 +25,15 @@ def bootstrap_registry() -> MetricRegistry:
     # Same underlying column as "orders", but registered separately: this one is meant to be
     # aggregated *per customer* (see repeat_purchase_rate's GROUP BY), not across the whole table.
     registry.register_measure(
-        Measure(name="orders_per_customer", entity="orders", source_field="order_id", aggregation=AggregationType.COUNT_DISTINCT)
+        Measure(
+            name="orders_per_customer",
+            entity="orders",
+            source_field="order_id",
+            aggregation=AggregationType.COUNT_DISTINCT,
+            # Aggregated per customer inside repeat_purchase_rate; meaningless as a component
+            # of its own (hld.md finding 19).
+            planner_selectable=False,
+        )
     )
 
     # Tier 2: named metrics
