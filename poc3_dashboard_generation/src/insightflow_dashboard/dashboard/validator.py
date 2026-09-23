@@ -35,9 +35,12 @@ class DashboardValidator:
         self.min_components = min_components
         self.max_components = max_components
 
-    def validate(self, spec: DashboardSpec) -> DashboardValidationResult:
+    def validate(self, spec: DashboardSpec, min_components: int | None = None) -> DashboardValidationResult:
+        """`min_components` lowers this validator's configured floor for one call, for a dataset that
+        cannot supply that many distinct components (see DashboardGenerationPipeline.run). It is only
+        ever passed downwards; the maximum and every other rule are unaffected."""
         errors: list[DashboardValidationError] = []
-        errors += self._validate_component_count(spec.components)
+        errors += self._validate_component_count(spec.components, min_components)
         errors += self._validate_no_duplicate_kpis(spec.components)
         errors += self._validate_filters(spec.filters)
         for component in spec.components:
@@ -208,13 +211,16 @@ class DashboardValidator:
             seen.add(component.metric_name)
         return errors
 
-    def _validate_component_count(self, components: list[ComponentSpec]) -> list[DashboardValidationError]:
+    def _validate_component_count(
+        self, components: list[ComponentSpec], min_components: int | None = None
+    ) -> list[DashboardValidationError]:
+        minimum = self.min_components if min_components is None else min(self.min_components, min_components)
         count = len(components)
-        if count < self.min_components:
+        if count < minimum:
             return [
                 DashboardValidationError(
                     code="too_few_components",
-                    message=f"dashboard has {count} components, fewer than the minimum {self.min_components}",
+                    message=f"dashboard has {count} components, fewer than the minimum {minimum}",
                 )
             ]
         if count > self.max_components:

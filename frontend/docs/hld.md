@@ -513,6 +513,43 @@ Still open: **15** (an ambiguous dimension is still reported as one that doesn't
 deterministic, since a prompt instruction is not a guardrail, and the review UI has nowhere to resolve the
 clash), **14** (revenue as an expression — the B2/B3 engine work), **16–18**, **21–27**.
 
+### The second run, against the fixed code
+
+All ten journeys again, real Groq, same ground truth. **38 of 38 numbers matched exactly**, plus
+ClassicModels' revenue growth at −0.4679344331 against a hand-computed −0.4679344331 — a figure the dataset
+could not produce at all before. Still no wrong number anywhere.
+
+What changed, dataset by dataset:
+
+- **`pizza_place_sales` answers questions.** "How many orders were there in total?" returns 21,350, matching
+  DuckDB, where every question was refused before. Its dashboard still failed, but on something new —
+  finding 29 below.
+- **`classic_models` has periods.** The growth question is answered from a real window (Q1 2005 vs Q4 2004),
+  and the dashboard narrative now carries computed growth (+0.12% revenue, −5.71% orders) instead of nothing.
+- **`bikestores` anchors on 2018-04-30**, not 2018-12-28, and its narrative reports growth rather than the
+  33% decline it read off four stray orders.
+- **No `orders_per_customer` component on any dataset.** That also removed northwind's duplicate pair, and
+  Superstore's part-to-whole moved from "Orders by product name" (1,000 truncated rows) to "Orders by
+  category" (3). A `customers by product_name` table still appears, so finding 21 is narrowed, not closed.
+- **Finding 28 confirmed in the wild:** both runs hit a real Groq 429 and the `Job` row read the clean
+  sentence, with no organization id and no billing link.
+
+29. **A dataset with one usable metric gets no dashboard at all.** `pizza_place_sales` resolves exactly one
+    metric (`orders`) and no dimension the engine can join to it in a single hop — `category` sits two hops
+    away, through `order_details` and `pizzas`. Asked for `DASHBOARD_MIN_COMPONENTS` (3), the planner padded
+    the spec by repeating the same KPI, and the validator refused the whole thing: *invalid dashboard spec:
+    ['metric "orders" appears as more than one KPI component']*. The minimum is unsatisfiable on this
+    dataset, so no spec could ever have passed.
+    - *Fixed* two ways, both deterministic. `_drop_duplicate_kpis` repairs the spec before validation — a
+      repeated KPI says nothing twice and is never a reason to refuse everything, while the same metric by
+      two different dimensions is two real views and is kept. And `PlannerContext.component_ceiling` (one KPI
+      per resolvable metric, plus one per joinable metric/dimension pair) lowers the floor to what the
+      dataset can actually supply; it only ever lowers it.
+    - Unit-tested, but **not yet confirmed end to end**: the second run exhausted the day's Groq token quota
+      before this fix existed, so the next survey run is what proves `pizza_place_sales` renders a dashboard.
+- Finding **27** (no retry on a provider 429/503) bit twice more during this run — one chat question lost on
+  `classic_models` and one on `superstore` — and is still unfixed.
+
 One button under the semantic model, shown to Analysts and above only, matching the route's own gate:
 it downloads a Power BI project the reader opens in Power BI Desktop. Nothing Power BI renders appears
 in this app — there are no Power BI licences, so the Service, embedding and the REST API are out

@@ -43,3 +43,16 @@ class PlannerContext(BaseModel):
     # though they're still listed informationally in available_metrics (they're what the
     # pre-computed growth signals below are named after).
     resolvable_metrics: list[str] = Field(default_factory=list)
+
+    @property
+    def component_ceiling(self) -> int:
+        """How many distinct, valid components this dataset could support at most.
+
+        One KPI per resolvable metric, plus one grouped component per (metric, dimension) pair the
+        engine can actually join. The planner is asked for `dashboard_min_components`, but a dataset
+        can offer fewer than that -- Pizza Place Sales resolves one metric and no joinable dimension,
+        so every spec reaching three components had to repeat one, and the validator refused the
+        whole dashboard (frontend/docs/hld.md finding 29). Used to lower the minimum to what's
+        actually achievable, never to raise it.
+        """
+        return len(self.resolvable_metrics) + sum(len(dimensions) for dimensions in self.groupable_dimensions.values())

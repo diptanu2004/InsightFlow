@@ -163,3 +163,52 @@ def test_unknown_filter_dimension_is_rejected(registry, field_resolver):
     result = v.validate(spec)
     assert not result.is_valid
     assert any(e.code == "unknown_filter_dimension" for e in result.errors)
+
+
+def test_a_repeated_kpi_is_dropped_rather_than_failing_the_dashboard():
+    """Maven's Pizza Place Sales resolves one metric and no joinable dimension.
+
+    The planner padded the spec to the requested three components by repeating the same KPI, and the
+    whole dashboard came back 422: 'metric "orders" appears as more than one KPI component'
+    (frontend/docs/hld.md finding 29). A repeated KPI says nothing twice; it is not a reason to
+    refuse everything.
+    """
+    from insightflow_dashboard.dashboard.pipeline import _drop_duplicate_kpis
+
+    spec = DashboardSpec(
+        title="Pizza sales",
+        components=[
+            ComponentSpec(component_id="c1", type=ComponentType.KPI, metric_name="orders"),
+            ComponentSpec(component_id="c2", type=ComponentType.KPI, metric_name="orders"),
+            ComponentSpec(component_id="c3", type=ComponentType.KPI, metric_name="orders"),
+        ],
+    )
+    repaired = _drop_duplicate_kpis(spec)
+    assert [c.component_id for c in repaired.components] == ["c1"]
+
+
+def test_the_same_metric_by_two_dimensions_is_two_real_views_and_is_kept():
+    from insightflow_dashboard.dashboard.pipeline import _drop_duplicate_kpis
+
+    spec = DashboardSpec(
+        title="Overview",
+        components=[
+            ComponentSpec(component_id="c1", type=ComponentType.KPI, metric_name="revenue"),
+            ComponentSpec(component_id="c2", type=ComponentType.BAR_CHART, metric_name="revenue", dimension="category"),
+            ComponentSpec(component_id="c3", type=ComponentType.BAR_CHART, metric_name="revenue", dimension="region"),
+        ],
+    )
+    assert _drop_duplicate_kpis(spec) is spec
+
+
+def test_a_dataset_that_cannot_reach_the_minimum_is_not_refused_for_it(registry, field_resolver):
+    v = _validator(registry, field_resolver, min_c=3)
+    spec = DashboardSpec(
+        title="Pizza sales",
+        components=[ComponentSpec(component_id="c1", type=ComponentType.KPI, metric_name="orders")],
+    )
+    assert not v.validate(spec).is_valid
+    # One component is all this dataset could ever supply, so the floor comes down to it.
+    assert v.validate(spec, min_components=1).is_valid
+    # It only ever comes down: a dataset that could supply more is still held to the configured floor.
+    assert not v.validate(spec, min_components=9).is_valid

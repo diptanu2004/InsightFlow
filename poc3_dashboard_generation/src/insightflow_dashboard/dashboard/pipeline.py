@@ -17,6 +17,7 @@ from insightflow_dashboard.dashboard.hydrated import HydratedDashboard
 from insightflow_dashboard.dashboard.planner import DashboardPlanner
 from insightflow_dashboard.dashboard.planner_context import MetricSummary, PlannerContext
 from insightflow_dashboard.dashboard.resolver import DashboardDataResolver
+from insightflow_dashboard.dashboard.spec import ComponentType, DashboardSpec
 from insightflow_dashboard.dashboard.signal import SignalGatherer
 from insightflow_dashboard.dashboard.validator import SUPPORTED_COMPONENT_TYPES, DashboardValidator
 from insightflow_core.execution import QueryExecutor
@@ -34,6 +35,25 @@ from insightflow_core.validation.metric_resolvability import (
     resolvable_metric_names,
     unresolvable_reason,
 )
+
+
+def _drop_duplicate_kpis(spec: DashboardSpec) -> DashboardSpec:
+    """Keep the first KPI per metric and drop the rest -- a deterministic repair, not a rejection.
+
+    A repeated KPI says nothing twice; it is never a reason to refuse a whole dashboard. The planner
+    reaches for one when a dataset has fewer distinct things to show than the requested component
+    count (Pizza Place Sales: one resolvable metric, no joinable dimension). Grouped components are
+    left alone -- the same metric by two different dimensions is two real views.
+    """
+    seen: set[str] = set()
+    kept = []
+    for component in spec.components:
+        if component.type == ComponentType.KPI:
+            if component.metric_name in seen:
+                continue
+            seen.add(component.metric_name)
+        kept.append(component)
+    return spec if len(kept) == len(spec.components) else spec.model_copy(update={"components": kept})
 
 
 class DashboardGenerationPipeline:
@@ -82,8 +102,15 @@ class DashboardGenerationPipeline:
             raise ValueError(f"no registered metric can be computed from this dataset: {'; '.join(reasons)}")
 
         spec = self.planner.plan(context)
+        spec = _drop_duplicate_kpis(spec)
 
-        validation = self.validator.validate(spec)
+        # A dataset can offer fewer distinct components than the configured minimum, and then no
+        # valid spec exists at all: Maven's Pizza Place Sales resolves exactly one metric (`orders`)
+        # and no dimension the engine can join to it in one hop, so the planner padded the spec by
+        # repeating the same KPI and the whole dashboard was refused with "metric "orders" appears
+        # as more than one KPI component" (frontend/docs/hld.md finding 29). One honest KPI beats a
+        # 422. The minimum still applies wherever the dataset could actually satisfy it.
+        validation = self.validator.validate(spec, min_components=min(self.validator.min_components, context.component_ceiling))
         if not validation.is_valid:
             raise ValueError(f"invalid dashboard spec: {[e.message for e in validation.errors]}")
 
